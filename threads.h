@@ -2,11 +2,20 @@
 #ifndef THREAH_H
 #define THREAD_H
 
+#include <signal.h>
+#include <unistd.h>
+
 #define DEFAULT_THREAD_ATTR ((void *)0)
+#define SIGTEMP  (SIGRTMIN)
+#define SIGLIGHT (SIGRTMIN+1)
 
 pthread_mutex_t gtemp_mutex;
 pthread_cond_t gtemp_condition;
 sig_atomic_t gtemp_flag;
+
+pthread_mutex_t glight_mutex;
+pthread_cond_t glight_condition;
+sig_atomic_t glight_flag;
 
 /**
 *structure to pass arguments and data to thread function
@@ -33,5 +42,13 @@ void *lightTask(void *pthread_inf);
 *@return: returns NULL pointer
 */
 void *tempTask(void *pthread_inf);
+
+/**
+*@brief:Implements log Task
+*Requests and receives logs from other tasks and writes them synchronously on file
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *logTask(void *pthread_inf);
 
 #endif

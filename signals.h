@@ -3,11 +3,20 @@
 #define SIGNALS_H
 
 /**
-*@brief:Signal handler for
-*Wakes up periodically to read light data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
-*@param:pointer to thread info structure
-*@return: returns NULL pointer
+*@brief:Signal handler for temp task
+*sets the global flag atomically and signals the temp task throught a condition *variable to read next data
+*@param:signal no.
+*@return: no returns
 */
-void thread1_sig_handler(int sig);
+void temp_sig_handler(int sig);
+
+
+/**
+*@brief:Signal handler for light task
+*sets the global flag atomically and signals the light task throught a *condition variable to read next data
+*@param:signal no.
+*@return: no returns
+*/
+void light_sig_handler(int sig);
 
 #endif

@@ -1,13 +1,16 @@
-main.elf:main.c thread1.o thread2.o signals.o
+main.elf:main.c lightTask.o tempTask.o signals.o logtask.o
 	gcc -o $@ $^ -lpthread -lrt
 
 signals.o:signals.c
 	gcc -c -o $@ $<
 
-thread1.o:thread1.c
+logTask.o:logTask.c
+	gcc -c -o $@ $<
+
+lightTask.o:lightTask.c
 	gcc -c -o $@ $<  -lpthread -lrt
 
-thread2.o:thread2.c
+tempTask.o:tempTask.c
 	gcc -c -o $@ $<  -lpthread -lrt
 
 clean:
