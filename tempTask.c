@@ -13,8 +13,10 @@
 void *tempTask(void *pthread_inf) {
 
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
-
+        //gtemp_mutex = PTHREAD_MUTEX_INITIALIZER;
         int ret;
+        ret = pthread_mutex_init(&gtemp_mutex,NULL);
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 /****** creating RT signal SIGTEMP with SA_RESTART flag for which 1 parameter
  *** .sa_handler should be used for handler function(not .sa_sigaction)********/
 

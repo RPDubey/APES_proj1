@@ -8,5 +8,6 @@
 
 void *logTask(void *pthread_inf) {
 
+        threadInfo *ppthread_info = (threadInfo *)pthread_inf;
         return NULL;
 }

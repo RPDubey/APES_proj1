@@ -18,8 +18,9 @@ void *lightTask(void *pthread_inf) {
 
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
-
-
+//        glight_mutex = PTHREAD_MUTEX_INITIALIZER;
+        ret = pthread_mutex_init(&glight_mutex,NULL);
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 /****** creating RT signal SIGRTMIN+1 with SA_RESTART flag for which 1 parameter
    .sa_handler should be used for handler function(not .sa_sigaction)********/
 

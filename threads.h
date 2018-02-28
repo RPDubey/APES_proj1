@@ -9,11 +9,11 @@
 #define SIGTEMP  (SIGRTMIN)
 #define SIGLIGHT (SIGRTMIN+1)
 
-pthread_mutex_t gtemp_mutex;
+pthread_mutex_t gtemp_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t gtemp_condition;
 sig_atomic_t gtemp_flag;
 
-pthread_mutex_t glight_mutex;
+pthread_mutex_t glight_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t glight_condition;
 sig_atomic_t glight_flag;
 
