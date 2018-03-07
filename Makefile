@@ -16,4 +16,4 @@ tempTask.o:tempTask.c
 	gcc -c -o $@ $<  -lpthread -lrt
 
 clean:
-	rm -f *.o *.elf
+	rm -f *.o *.elf logfile.txt

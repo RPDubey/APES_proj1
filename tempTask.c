@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include "threads.h"
 #include "signals.h"
+#include "messageQue.h"
+#include <mqueue.h>
 
 #define FREQ_NSEC (1000000000)
 
@@ -14,6 +16,23 @@ void *tempTask(void *pthread_inf) {
 
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
         //gtemp_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/*******Initialize Message Que*****************/
+        mqd_t msgq;
+        int msg_prio = 30;
+        int num_bytes;
+        char message[BUF_SIZE];
+        struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                    .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                    .mq_flags = 0};
+
+        msgq = mq_open(MY_MQ, //name
+                       O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                       S_IRWXU, //mode-read,write and execute permission
+                       &msgq_attr); //attribute
+        if(msgq < 0) {perror("mq_open-tempTask Error:"); return NULL;}
+        else printf("Messgae Que Opened in tempTask\n");
+
         int ret;
         ret = pthread_mutex_init(&gtemp_mutex,NULL);
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
@@ -87,7 +106,18 @@ void *tempTask(void *pthread_inf) {
 
                 pthread_mutex_unlock(&gtemp_mutex);
                 gtemp_flag = 0;
-        }
+//collect temperatue
 
+//if requested, respond to temp
+
+/*******Log messages on Que*************/
+                num_bytes = mq_send(msgq,
+                                    "tempTask",
+                                    sizeof("tempTask"),
+                                    msg_prio);
+                if(num_bytes<0) {perror("mq_sen-tempTask Error"); return NULL;}
+
+        }
+        mq_unlink(MY_MQ);
         return NULL;
 }

@@ -20,7 +20,7 @@ void temp_sig_handler(int sig){
 void light_sig_handler(int sig){
         printf("caught light signal %d\n",sig);
         pthread_mutex_lock(&glight_mutex);
-        gtemp_flag = 1;
+        glight_flag = 1;
         pthread_cond_signal(&glight_condition);
         pthread_mutex_unlock(&glight_mutex);
 

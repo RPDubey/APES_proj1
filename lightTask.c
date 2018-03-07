@@ -7,8 +7,10 @@
 #include <unistd.h>
 #include "threads.h"
 #include "signals.h"
+#include "messageQue.h"
+#include <mqueue.h>
 
-#define FREQ_NSEC (100000000)
+#define FREQ_NSEC (1000000000)
 
 /**
  * Thread 1 function
@@ -16,9 +18,25 @@
 
 void *lightTask(void *pthread_inf) {
 
-        int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
-//        glight_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/*******Initialize Message Que*****************/
+        mqd_t msgq;
+        int msg_prio = MSG_PRIO;
+        int num_bytes;
+        char message[BUF_SIZE];
+        struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                    .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                    .mq_flags = 0};
+
+        msgq = mq_open(MY_MQ, //name
+                       O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                       S_IRWXU, //mode-read,write and execute permission
+                       &msgq_attr); //attribute
+        if(msgq < 0) {perror("mq_open-lightTask Error:"); return NULL;}
+        else printf("Messgae Que Opened in lightTask\n");
+
+        int ret;
         ret = pthread_mutex_init(&glight_mutex,NULL);
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 /****** creating RT signal SIGRTMIN+1 with SA_RESTART flag for which 1 parameter
@@ -93,8 +111,15 @@ void *lightTask(void *pthread_inf) {
 
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
-        }
+/*******Log messages on Que*************/
+                num_bytes = mq_send(msgq,
+                                    "lightTask",
+                                    sizeof("lightTask"),
+                                    msg_prio);
+                if(num_bytes<0) {perror("mq_send-lightTask Error"); return NULL;}
 
+        }
+        mq_unlink(MY_MQ);
         return NULL;
 
 }
