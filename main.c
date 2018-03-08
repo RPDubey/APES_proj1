@@ -5,12 +5,19 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
-
+#include "includes.h"
 #include "threads.h"
+#include "signals.h"
 
 int main()
 {
         printf("Entering Main\n");
+        gclose_app = 1;
+        gclose_light = 1;
+        gclose_temp  = 1;
+        gclose_log   = 1;
+//install SIGINT handler to close application
+        signal(SIGINT,SIGINT_handler);
         int ret;
         pthread_t temp; threadInfo temp_info; temp_info.thread_id = 1;
         pthread_t light; threadInfo light_info; light_info.thread_id = 2;

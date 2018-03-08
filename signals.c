@@ -7,6 +7,14 @@
 
 #include "threads.h"
 
+void SIGINT_handler(int sig){
+        if(sig == SIGINT) {
+                gclose_app   = 0;
+                printf("\ncleared gclose flag\n");
+        }
+}
+
+
 void temp_sig_handler(int sig){
         printf("caught temp signal %d\n",sig);
         pthread_mutex_lock(&gtemp_mutex);

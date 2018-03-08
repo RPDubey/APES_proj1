@@ -9,6 +9,7 @@
 #include "signals.h"
 #include "messageQue.h"
 #include <mqueue.h>
+#include "includes.h"
 
 #define FREQ_NSEC (1000000000)
 
@@ -94,9 +95,11 @@ void *tempTask(void *pthread_inf) {
                 NULL);         //if non NULL prev val of signal mask stored here
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
-
+/************Creating logpacket*******************/
+        log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
+        time_t t = time(NULL);
 /****************Do this periodically*******************************/
-        while(1) {
+        while(gclose_temp & gclose_app) {
 
 
                 pthread_mutex_lock(&gtemp_mutex);
@@ -108,16 +111,24 @@ void *tempTask(void *pthread_inf) {
                 gtemp_flag = 0;
 //collect temperatue
 
-//if requested, respond to temp
+/************populate the log packet*********/
+                struct tm *tm = localtime(&t);
+                strcpy(temp_log.time_stamp, asctime(tm));
+                strcpy(temp_log.log_msg, "tempTask");
+
+//
 
 /*******Log messages on Que*************/
                 num_bytes = mq_send(msgq,
-                                    "tempTask",
-                                    sizeof("tempTask"),
+                                    (const char*)&temp_log,
+                                    sizeof(log_pack),
                                     msg_prio);
-                if(num_bytes<0) {perror("mq_sen-tempTask Error"); return NULL;}
+                if(num_bytes<0) {perror("mq_sen-tempTask Error"); gclose_temp = 0;}
 
         }
+        printf("exiting Temp task\n");
+        timer_delete(timerid);
         mq_unlink(MY_MQ);
+        mq_close(msgq);
         return NULL;
 }

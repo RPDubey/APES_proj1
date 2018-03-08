@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <errno.h>
 #include <string.h>
@@ -7,6 +8,8 @@
 #include "threads.h"
 #include "messageQue.h"
 #include <mqueue.h>
+#include "includes.h"
+#include "signals.h"
 
 void *logTask(void *pthread_inf) {
 
@@ -15,7 +18,9 @@ void *logTask(void *pthread_inf) {
         mqd_t msgq;
         int msg_prio;
         int num_bytes;
-        char message[BUF_SIZE];
+        //char message[BUF_SIZE];
+        log_pack* log = (log_pack*)malloc(sizeof(log_pack));
+        if(log == NULL) {perror("malloc-logTask Err"); return NULL;}
         struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
                                     .mq_msgsize = BUF_SIZE,//max size of msg in bytes
                                     .mq_flags = 0};
@@ -30,22 +35,27 @@ void *logTask(void *pthread_inf) {
         FILE* pfd = fopen("logfile.txt","w");
         if(pfd==NULL) {perror("fopen-logTask Error:"); return NULL;}
         else printf("log file opened in logTask\n");
-        while(1)
+        while(gclose_log & gclose_app)
         {
 //read from queue
                 num_bytes=mq_receive(msgq,
-                                     message,
+                                     (char*)log,
                                      BUF_SIZE,
                                      &msg_prio);
-                if(num_bytes<0) {perror("mq_rcv-logTask Error:"); return NULL;}
+                if(num_bytes<0) {perror("mq_rcv-logTask Error"); gclose_log = 0; }
 //write to a log file
 
-                fprintf(pfd,"Written to Log file:%s\n",message);
+                fprintf(pfd,"%s  %d  %d  %s\n\n",
+                        ((log_pack*)log)->time_stamp,((log_pack*)log)->log_level,
+                        ((log_pack*)log)->log_source,((log_pack*)log)->log_msg );
                 fflush(pfd);
 
-                printf("Written to Log file:%s\n",message);
+                //  printf("Written to Log file:%s\n",message);
         }
+        printf("exiting Log task\n");
         fclose(pfd);
         mq_unlink(MY_MQ);
+        mq_close(msgq);
+        free(log);
         return NULL;
 }

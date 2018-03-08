@@ -2,6 +2,19 @@
 #ifndef SIGNALS_H
 #define SIGNALS_H
 
+sig_atomic_t gclose_light;
+sig_atomic_t gclose_log;
+sig_atomic_t gclose_temp;
+sig_atomic_t gclose_app;
+
+/**
+*@brief:Signal handler for SIGINT
+*clears the global flag atomically to allow tasks to exit from while(1) loop and close *ques, file descriptors etc before exiting
+*@param:signal no.
+*@return: no returns
+*/
+void SIGINT_handler(int sig);
+
 /**
 *@brief:Signal handler for temp task
 *sets the global flag atomically and signals the temp task throught a condition *variable to read next data
@@ -18,5 +31,6 @@ void temp_sig_handler(int sig);
 *@return: no returns
 */
 void light_sig_handler(int sig);
+
 
 #endif

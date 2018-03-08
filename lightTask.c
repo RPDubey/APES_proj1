@@ -9,7 +9,7 @@
 #include "signals.h"
 #include "messageQue.h"
 #include <mqueue.h>
-
+#include "includes.h"
 #define FREQ_NSEC (1000000000)
 
 /**
@@ -98,10 +98,11 @@ void *lightTask(void *pthread_inf) {
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
 
-
-
+/************Creating logpacket*******************/
+        log_pack light_log ={.log_level=1,.log_source = light_Task};
+        time_t t = time(NULL);
 /****************Do this periodically*******************************/
-        while(1) {
+        while(gclose_light & gclose_app) {
 
 
                 pthread_mutex_lock(&glight_mutex);
@@ -111,15 +112,24 @@ void *lightTask(void *pthread_inf) {
 
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
+/***********collect data*****************/
+
+/************populate the log packet*********/
+                struct tm *tm = localtime(&t);
+                strcpy(light_log.time_stamp, asctime(tm));
+                strcpy(light_log.log_msg, "lightTask");
 /*******Log messages on Que*************/
-                num_bytes = mq_send(msgq,
-                                    "lightTask",
-                                    sizeof("lightTask"),
-                                    msg_prio);
-                if(num_bytes<0) {perror("mq_send-lightTask Error"); return NULL;}
+num_bytes = mq_send(msgq,
+                    (const char*)&light_log,
+                    sizeof(log_pack),
+                    msg_prio);
+if(num_bytes<0) {perror("mq_send-lightTask Err"); gclose_light=0;}
 
         }
+        printf("exiting light task\n");
+        timer_delete(timerid);
         mq_unlink(MY_MQ);
+        mq_close(msgq);
         return NULL;
 
 }
