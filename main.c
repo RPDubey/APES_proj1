@@ -9,6 +9,11 @@
 #include "threads.h"
 #include "signals.h"
 
+
+void LightHBhandler(int sig){
+        if(sig == SIGLIGHT_HB)
+                printf("caught HB\n");
+}
 int main()
 {
         printf("Entering Main\n");
@@ -19,12 +24,13 @@ int main()
 //install SIGINT handler to close application
         signal(SIGINT,SIGINT_handler);
         int ret;
-        pthread_t temp; threadInfo temp_info; temp_info.thread_id = 1;
-        pthread_t light; threadInfo light_info; light_info.thread_id = 2;
-        pthread_t log; threadInfo log_info; log_info.thread_id = 3;
+        pthread_t temp,light,log;
+        threadInfo temp_info; temp_info.thread_id = 1; temp_info.main=pthread_self();
+        threadInfo light_info; light_info.thread_id = 2; light_info.main=pthread_self();
+        threadInfo log_info; log_info.thread_id = 3; log_info.main=pthread_self();
 
-        sigset_t mask; //set of signals
 /*SIGTEMP should be received by thread1 only. so blocking it for main thread*/
+        sigset_t mask; //set of signals
 // sigemptyset(&mask); sigaddset(&mask,SIGTEMP);
 // ret = pthread_sigmask(
 //         SIG_SETMASK, //block the signals in the set argument
@@ -38,6 +44,13 @@ int main()
 //         &mask,         //set argument has list of blocked signals
 //         NULL);         //if non NULL prev val of signal mask stored here
 // if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+
+        struct sigaction action;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        action.sa_handler = LightHBhandler;
+        ret = sigaction(SIGLIGHT_HB,&action,NULL);
+        if(ret == -1) { perror("sigaction main"); return -1; }
 
         ret = pthread_create(  &temp,
                                DEFAULT_THREAD_ATTR,

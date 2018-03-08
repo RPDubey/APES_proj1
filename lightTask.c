@@ -50,12 +50,12 @@ void *lightTask(void *pthread_inf) {
 /****************Do this periodically*******************************/
         while(gclose_light & gclose_app) {
 
+                pthread_kill(ppthread_info->main,SIGLIGHT_HB);//send HB
 
                 pthread_mutex_lock(&glight_mutex);
                 while(glight_flag == 0) {
                         pthread_cond_wait(&glight_condition,&glight_mutex);
                 }
-
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
 /***********collect data*****************/
