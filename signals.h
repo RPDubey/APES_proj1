@@ -2,6 +2,7 @@
 #ifndef SIGNALS_H
 #define SIGNALS_H
 
+
 sig_atomic_t gclose_light;
 sig_atomic_t gclose_log;
 sig_atomic_t gclose_temp;
@@ -15,6 +16,22 @@ sig_atomic_t gclose_app;
 */
 void SIGINT_handler(int sig);
 
+
+/**
+*@brief:sets timer and signal handler for timer notification for temp task
+*@param:void
+*@return: int success/failure
+*/
+int setTempTimer();
+
+/**
+*@brief:sets timer and signal handler for light task
+*@param:void
+*@return: int success/failure
+*/
+int setLightTimer();
+
+
 /**
 *@brief:Signal handler for temp task
 *sets the global flag atomically and signals the temp task throught a condition *variable to read next data
@@ -22,7 +39,6 @@ void SIGINT_handler(int sig);
 *@return: no returns
 */
 void temp_sig_handler(int sig);
-
 
 /**
 *@brief:Signal handler for light task

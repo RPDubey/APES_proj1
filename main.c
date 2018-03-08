@@ -25,19 +25,19 @@ int main()
 
         sigset_t mask; //set of signals
 /*SIGTEMP should be received by thread1 only. so blocking it for main thread*/
-        sigemptyset(&mask); sigaddset(&mask,SIGTEMP);
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
-/*SIGLIGHTshould be received by thread1 only. so blocking it for main thread*/
-        sigemptyset(&mask); sigaddset(&mask,SIGLIGHT);
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+// sigemptyset(&mask); sigaddset(&mask,SIGTEMP);
+// ret = pthread_sigmask(
+//         SIG_SETMASK, //block the signals in the set argument
+//         &mask, //set argument has list of blocked signals
+//         NULL); //if non NULL prev val of signal mask stored here
+// if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+// /*SIGLIGHTshould be received by thread1 only. so blocking it for main thread*/
+// sigemptyset(&mask); sigaddset(&mask,SIGLIGHT);
+// ret = pthread_sigmask(
+//         SIG_SETMASK,         //block the signals in the set argument
+//         &mask,         //set argument has list of blocked signals
+//         NULL);         //if non NULL prev val of signal mask stored here
+// if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
 
         ret = pthread_create(  &temp,
                                DEFAULT_THREAD_ATTR,
