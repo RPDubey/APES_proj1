@@ -2,6 +2,9 @@
 #ifndef SIGNALS_H
 #define SIGNALS_H
 
+#define SIGTEMP  (SIGRTMIN)
+#define SIGLIGHT (SIGRTMIN+1)
+#define SIGLIGHT_HB (SIGRTMIN+2)
 
 /**
 *@brief:sets timer and signal handler for timer notification for temp task

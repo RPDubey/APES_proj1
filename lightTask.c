@@ -18,12 +18,13 @@ void *lightTask(void *pthread_inf) {
 /****************Do this periodically*******************************/
         while(1) {
 
+                pthread_kill(ppthread_info->main,SIGLIGHT_HB);//send HB
 
                 pthread_mutex_lock(&glight_mutex);
                 while(glight_flag == 0) {
                         pthread_cond_wait(&glight_condition,&glight_mutex);
                 }
-
+                printf("hi\n" );
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
         }

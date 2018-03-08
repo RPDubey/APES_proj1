@@ -6,8 +6,6 @@
 #include <unistd.h>
 
 #define DEFAULT_THREAD_ATTR ((void *)0)
-#define SIGTEMP  (SIGRTMIN)
-#define SIGLIGHT (SIGRTMIN+1)
 
 pthread_mutex_t gtemp_mutex;
 pthread_cond_t gtemp_condition;
