@@ -1,7 +1,7 @@
 #ifndef messageQue_H
 #define messageQue_H
 
-#define MY_MQ   "/logger_MQ3"
+#define MY_MQ   "/logger_MQ4"
 #define BUF_SIZE 4096
 #define MQ_MAXMSG 10
 #define MSG_PRIO  30

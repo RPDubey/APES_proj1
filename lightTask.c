@@ -74,7 +74,7 @@ void *lightTask(void *pthread_inf) {
 
 /************Creating logpacket*******************/
         log_pack light_log ={.log_level=1,.log_source = light_Task};
-
+        struct timespec now,expire;
 /****************Do this periodically*******************************/
         while(gclose_light & gclose_app) {
 
@@ -93,18 +93,22 @@ void *lightTask(void *pthread_inf) {
                 strcpy(light_log.time_stamp, asctime(tm));
                 strcpy(light_log.log_msg, "lightTask");
 /************Log messages on Que*************/
-                //    sleep(30);
-                num_bytes = mq_send(msgq,
-                                    (const char*)&light_log,
-                                    sizeof(log_pack),
-                                    msg_prio);
-                if(num_bytes<0) {perror("mq_send-lightTask Err"); gclose_light=0;}
+                //  sleep(30);
+                clock_gettime(CLOCK_MONOTONIC,&now);
+                expire.tv_sec = now.tv_sec+2;
+                expire.tv_nsec = now.tv_nsec;
+                num_bytes = mq_timedsend(msgq,
+                                         (const char*)&light_log,
+                                         sizeof(log_pack),
+                                         msg_prio,
+                                         &expire);
+                if(num_bytes<0) {perror("mq_send-Log Q-lightTask");}
 /******Log data on IPC Que if requested******/
 
                 if(light_IPC_flag == 1) {
                         light_IPC_flag = 0;
 //set up time for timed send
-                        struct timespec now,expire;
+
                         clock_gettime(CLOCK_MONOTONIC,&now);
                         expire.tv_sec = now.tv_sec+2;
                         expire.tv_nsec = now.tv_nsec;
@@ -113,7 +117,7 @@ void *lightTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {perror("mq_send-IPC tempTask Error");}
+                        if(num_bytes<0) {perror("mq_send-IPC-lightTask Error");}
                         else printf("data put on IPC msg Q\n");
                 }
 

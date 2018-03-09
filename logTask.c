@@ -61,17 +61,21 @@ void *logTask(void *pthread_inf) {
                            &IPCmsgq_attr); //attribute
         if(IPCmsgqL < 0) {perror("mq_open-logTask Error:"); return NULL;}
         else printf("IPC light Messgae Que Opened in logTask\n");
-
+        struct timespec now,expire;
 
         while(gclose_log & gclose_app)
         {
                 pthread_kill(ppthread_info->main,SIGLOG_HB);//send HB
 //read from queue
+                clock_gettime(CLOCK_MONOTONIC,&now);
+                expire.tv_sec = now.tv_sec+1;
+                expire.tv_nsec = now.tv_nsec;
                 num_bytes=mq_receive(msgq,
                                      (char*)log,
                                      BUF_SIZE,
                                      &msg_prio);
-                if(num_bytes<0) {perror("mq_rcv-logTask Error"); gclose_log = 0; }
+//                                          &expire);
+                if(num_bytes<0) {perror("mq_rcv-Log Q-logTask Error"); }
 //write to a log file
                 fprintf(pfd,"%s  %d  %d  %s\n\n",
                         ((log_pack*)log)->time_stamp,((log_pack*)log)->log_level,
@@ -80,7 +84,7 @@ void *logTask(void *pthread_inf) {
 
 /*****&&&&&&&&&&&&&&&&&&& printing data for IPC message Q test &&&&&&&&&&&&&&&&&*******/
 
-                struct timespec now,expire;
+
                 clock_gettime(CLOCK_MONOTONIC,&now);
                 expire.tv_sec = now.tv_sec+1;
                 expire.tv_nsec = now.tv_nsec;

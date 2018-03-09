@@ -20,7 +20,6 @@
                         current.tv_nsec = remaining.tv_nsec;} \
         } while(ret != 0);  \
 
-
 sig_atomic_t glight_HB_flag;
 sig_atomic_t gtemp_HB_flag;
 sig_atomic_t glog_HB_flag;
@@ -28,7 +27,7 @@ sig_atomic_t glog_HB_flag;
 void LightHBhandler(int sig){
         if(sig == SIGLIGHT_HB)
         {
-                printf("Light HB\n");
+                //  printf("L");
                 glight_HB_flag = 1;
         }
 }
@@ -36,7 +35,7 @@ void LightHBhandler(int sig){
 void TempHBhandler(int sig){
         if(sig == SIGTEMP_HB)
         {
-                printf("Temp HB\n");
+                //  printf("T");
                 gtemp_HB_flag = 1;
         }
 }
@@ -44,7 +43,7 @@ void TempHBhandler(int sig){
 void LogHBhandler(int sig){
         if(sig == SIGLOG_HB)
         {
-                printf("LOG HB\n");
+                //    printf("l");
                 glog_HB_flag = 1;
         }
 }
@@ -110,21 +109,61 @@ int main()
                                logTask,
                                (void *)&(log_info) );
         if (ret != 0) {  printf("Error:%s\n",strerror(errno)); return -1;}
-
+        uint8_t read_bytes; char choice;
+        uint8_t light_cancelled=0; uint8_t temp_cancelled=0; uint8_t log_cancelled=0;
         while (gclose_app) {
-//check HB signals
                 SLEEP(10);
-                printf("HB check\n");
+//check HB signals
 
-                if(gtemp_HB_flag == 0) printf("send close signal to temp task\n");
-                else if(gtemp_HB_flag == 1) { gtemp_HB_flag = 0;}
+                printf("M");
+                if(light_cancelled == 0) {
+                        if(glight_HB_flag == 0) printf("NO HB from Light Task\n");
+                        else {printf("L"); glight_HB_flag = 0;}
+                }
 
-                if(glight_HB_flag == 0) printf("send close signal to light task\n");
-                else if(glight_flag == 1) { glight_HB_flag = 0;}
+                if(temp_cancelled == 0) {
+                        if(gtemp_HB_flag == 0) printf("NO HB from Temp Task\n");
+                        else {printf("T"); gtemp_HB_flag = 0;}
+                }
 
-                if(glog_HB_flag == 0) printf("send close signal to log task\n");
-                else if(glog_HB_flag == 1) { glog_HB_flag = 0;}
+                if(log_cancelled == 0) {
+                        if(glog_HB_flag == 0) printf("NO HB from Log Task\n");
+                        else {printf("l"); glog_HB_flag = 0;}
+                }
+                fflush(stdout);
 
+                printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
+
+                read_bytes=read(0,&choice,sizeof(char));
+                if(read_bytes == 1) {
+                        printf("choice:%c\n",choice);
+                        switch(choice) {
+                        case '1':
+                                if(temp_cancelled == 0) {
+                                        printf("sending close signal to temp task\n");
+                                        gclose_temp = 0; temp_cancelled = 1;
+                                }
+                                break;
+                        case '2':
+                                if(light_cancelled == 0) {
+                                        printf("sending close signal to light task\n");
+                                        gclose_light = 0; light_cancelled = 1;
+                                }
+                                break;
+                        case '3':
+                                if(log_cancelled == 0) {
+                                        printf("sending close signal to log task\n");
+                                        gclose_log = 0; log_cancelled = 1;
+                                }
+                                break;
+                        case '4':
+                                printf("Closing application\n");
+                                pthread_cancel(temp); pthread_cancel(light);
+                                pthread_cancel(log); gclose_app = 0;
+                                break;
+                        }
+                        read_bytes = 0;
+                }
         }
         pthread_join(temp, NULL);
         pthread_join(light, NULL);
