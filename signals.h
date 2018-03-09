@@ -2,9 +2,11 @@
 #ifndef SIGNALS_H
 #define SIGNALS_H
 
-#define SIGTEMP  (SIGRTMIN)
-#define SIGLIGHT (SIGRTMIN+1)
+#define SIGTEMP     (SIGRTMIN)
+#define SIGLIGHT    (SIGRTMIN+1)
 #define SIGLIGHT_HB (SIGRTMIN+2)
+#define SIGTEMP_HB  (SIGRTMIN+3)
+#define SIGLOG_HB  (SIGRTMIN+4)
 
 sig_atomic_t gclose_light;
 sig_atomic_t gclose_log;

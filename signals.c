@@ -18,7 +18,7 @@ void SIGINT_handler(int sig){
 #define FREQ_NSEC (1000000000)
 
 void temp_sig_handler(int sig){
-        printf("caught temp signal %d\n",sig);
+        //  printf("caught temp signal %d\n",sig);
         pthread_mutex_lock(&gtemp_mutex);
         gtemp_flag = 1;
         pthread_cond_signal(&gtemp_condition);
@@ -28,7 +28,7 @@ void temp_sig_handler(int sig){
 
 
 void light_sig_handler(int sig){
-        printf("caught light signal %d\n",sig);
+        //printf("caught light signal %d\n",sig);
         pthread_mutex_lock(&glight_mutex);
         glight_flag = 1;
         pthread_cond_signal(&glight_condition);

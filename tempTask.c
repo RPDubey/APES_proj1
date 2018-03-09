@@ -42,12 +42,11 @@ void *tempTask(void *pthread_inf) {
 
 /************Creating logpacket*******************/
         log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
-        time_t t = time(NULL);
 
 /****************Do this periodically*******************************/
         while(gclose_temp & gclose_app) {
 
-
+                pthread_kill(ppthread_info->main,SIGTEMP_HB);//send HB
                 pthread_mutex_lock(&gtemp_mutex);
                 while(gtemp_flag == 0) {
                         pthread_cond_wait(&gtemp_condition,&gtemp_mutex);
@@ -58,7 +57,8 @@ void *tempTask(void *pthread_inf) {
 //collect temperatue
 
 /************populate the log packet*********/
-                struct tm *tm = localtime(&t);
+
+                time_t t = time(NULL); struct tm *tm = localtime(&t);
                 strcpy(temp_log.time_stamp, asctime(tm));
                 strcpy(temp_log.log_msg, "tempTask");
 

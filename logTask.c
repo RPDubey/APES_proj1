@@ -37,6 +37,7 @@ void *logTask(void *pthread_inf) {
         else printf("log file opened in logTask\n");
         while(gclose_log & gclose_app)
         {
+                pthread_kill(ppthread_info->main,SIGLOG_HB);//send HB
 //read from queue
                 num_bytes=mq_receive(msgq,
                                      (char*)log,

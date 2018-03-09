@@ -45,7 +45,6 @@ void *lightTask(void *pthread_inf) {
 
 /************Creating logpacket*******************/
         log_pack light_log ={.log_level=1,.log_source = light_Task};
-        time_t t = time(NULL);
 
 /****************Do this periodically*******************************/
         while(gclose_light & gclose_app) {
@@ -58,13 +57,14 @@ void *lightTask(void *pthread_inf) {
                 }
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
-/***********collect data*****************/
+/*************collect data*****************/
 
 /************populate the log packet*********/
-                struct tm *tm = localtime(&t);
+                time_t t = time(NULL); struct tm *tm = localtime(&t);
                 strcpy(light_log.time_stamp, asctime(tm));
                 strcpy(light_log.log_msg, "lightTask");
-/*******Log messages on Que*************/
+/************Log messages on Que*************/
+                //    sleep(30);
                 num_bytes = mq_send(msgq,
                                     (const char*)&light_log,
                                     sizeof(log_pack),
