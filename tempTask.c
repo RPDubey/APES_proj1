@@ -123,9 +123,8 @@ void *tempTask(void *pthread_inf) {
 
         }
         printf("exiting Temp task\n");
-        //  timer_delete(timerid);
-        mq_unlink(IPC_TEMP_MQ);
-        mq_unlink(MY_MQ);
         mq_close(msgq);
+        mq_close(IPCmsgq);
+
         return NULL;
 }

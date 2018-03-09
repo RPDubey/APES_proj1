@@ -38,8 +38,7 @@ void *logTask(void *pthread_inf) {
 /**********************************************************************/
 
 
-/***************msg Q to test IPC transfer*****************************/
-/***************setting msgq for IPC data Request******************/
+/*******&&&&&&&&&&&&&& msg Q to test IPC transfer&&&&&&&&&&&&&&&&&&**********************/
         mqd_t IPCmsgqT, IPCmsgqL;
         int IPCmsg_prio = 20;
         int IPCnum_bytes;
@@ -48,25 +47,20 @@ void *logTask(void *pthread_inf) {
         struct mq_attr IPCmsgq_attr = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
                                        .mq_msgsize = BUF_SIZE, //max size of msg in bytes
                                        .mq_flags = 0};
-
+//temp
         IPCmsgqT = mq_open(IPC_TEMP_MQ, //name
                            O_CREAT | O_RDWR, //flags. create a new if dosent already exist
                            S_IRWXU, //mode-read,write and execute permission
                            &IPCmsgq_attr); //attribute
         if(IPCmsgqT < 0) {perror("mq_open-logTask Error:"); return NULL;}
         else printf("IPC temp Messgae Que Opened in logTask\n");
-
+//light
         IPCmsgqL = mq_open(IPC_LIGHT_MQ, //name
                            O_CREAT | O_RDWR, //flags. create a new if dosent already exist
                            S_IRWXU, //mode-read,write and execute permission
                            &IPCmsgq_attr); //attribute
         if(IPCmsgqL < 0) {perror("mq_open-logTask Error:"); return NULL;}
         else printf("IPC light Messgae Que Opened in logTask\n");
-
-
-/****************&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&****************/
-
-
 
 
         while(gclose_log & gclose_app)
@@ -84,8 +78,8 @@ void *logTask(void *pthread_inf) {
                         ((log_pack*)log)->log_source,((log_pack*)log)->log_msg );
                 fflush(pfd);
 
-/*****&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&*******/
-//printing data for IPC message Q test
+/*****&&&&&&&&&&&&&&&&&&& printing data for IPC message Q test &&&&&&&&&&&&&&&&&*******/
+
                 struct timespec now,expire;
                 clock_gettime(CLOCK_MONOTONIC,&now);
                 expire.tv_sec = now.tv_sec+1;
@@ -107,17 +101,13 @@ void *logTask(void *pthread_inf) {
                                             &expire);
                 if(num_bytes>0) {printf("data read on IPC msg Q:%s\n",log->time_stamp);}
 
-
-
-
-                //  printf("Written to Log file:%s\n",message);
         }
         printf("exiting Log task\n");
         fclose(pfd);
-        mq_unlink(IPC_TEMP_MQ);
-        mq_unlink(IPC_LIGHT_MQ);
-        mq_unlink(MY_MQ);
         mq_close(msgq);
+        mq_close(IPCmsgqT);
+        mq_close(IPCmsgqL);
+
         free(log);
         return NULL;
 }

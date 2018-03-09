@@ -120,10 +120,8 @@ void *lightTask(void *pthread_inf) {
 
         }
         printf("exiting light task\n");
-        //timer_delete(timerid);
-        mq_unlink(IPC_LIGHT_MQ);
-        mq_unlink(MY_MQ);
         mq_close(msgq);
+        mq_close(IPCmsgq);
         return NULL;
 
 }

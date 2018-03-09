@@ -8,6 +8,8 @@
 #include "includes.h"
 #include "threads.h"
 #include "signals.h"
+#include "messageQue.h"
+#include <mqueue.h>
 
 #define SLEEP(t)      struct timespec current,remaining; \
         current.tv_nsec = 0; current.tv_sec = t; \
@@ -127,6 +129,14 @@ int main()
         pthread_join(temp, NULL);
         pthread_join(light, NULL);
         pthread_join(log, NULL);
-        printf("Exiting Main\n");
+        printf("Joined all threads\n");
+
+/*********destroy message Ques***********************/
+        mq_unlink(IPC_TEMP_MQ);
+        mq_unlink(IPC_LIGHT_MQ);
+        mq_unlink(MY_MQ);
+        printf("Destroyed all opened Msg Ques\n");
+
+        printf("***************Exiting Main***************\n");
         return 0;
 }
