@@ -52,34 +52,32 @@ int main()
         printf("Entering Main\n");
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
         gtemp_HB_flag = 0; glight_HB_flag = 0;
-//install SIGINT handler to close application
+/***install SIGINT handler to close application*******/
         signal(SIGINT,SIGINT_handler);
+/*******************Masking SIgnals***********************/
+        // sigset_t mask; //set of signals
+        // sigemptyset(&mask); sigaddset(&mask,SIGTEMP_IPC);
+        // ret = pthread_sigmask(
+        //         SIG_SETMASK, //block the signals in the set argument
+        //         &mask, //set argument has list of blocked signals
+        //         NULL); //if non NULL prev val of signal mask stored here
+        // if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+
         int ret;
         pthread_t temp,light,log;
         threadInfo temp_info; temp_info.thread_id = 1; temp_info.main=pthread_self();
         threadInfo light_info; light_info.thread_id = 2; light_info.main=pthread_self();
         threadInfo log_info; log_info.thread_id = 3; log_info.main=pthread_self();
 
-/*SIGTEMP should be received by thread1 only. so blocking it for main thread*/
-// sigset_t mask; //set of signals
-// sigemptyset(&mask); sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT);
-// ret = pthread_sigmask(
-//         SIG_SETMASK, //block the signals in the set argument
-//         &mask, //set argument has list of blocked signals
-//         NULL); //if non NULL prev val of signal mask stored here
-// if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
-
 //Register Light HB signal
         struct sigaction action;
         sigemptyset(&action.sa_mask);
-        action.sa_flags = 0;
         action.sa_handler = LightHBhandler;
         ret = sigaction(SIGLIGHT_HB,&action,NULL);
         if(ret == -1) { perror("sigaction main"); return -1; }
 
 //Register Temp HB signal
         sigemptyset(&action.sa_mask);
-        action.sa_flags = 0;
         action.sa_handler = TempHBhandler;
         ret = sigaction(SIGTEMP_HB,&action,NULL);
         if(ret == -1) { perror("sigaction main"); return -1; }
