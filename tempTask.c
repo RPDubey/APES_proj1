@@ -69,7 +69,7 @@ void *tempTask(void *pthread_inf) {
         sigemptyset(&action.sa_mask);
         action.sa_handler = TemptIPChandler;
         ret = sigaction(SIGTEMP_IPC,&action,NULL);
-        if(ret == -1) { perror("sigaction main"); return NULL; }
+        if(ret == -1) { perror("sigaction temptask"); return NULL; }
         printf("pid:%d\n",getpid());
 
 

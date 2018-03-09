@@ -40,7 +40,7 @@ void *logTask(void *pthread_inf) {
 
 /***************msg Q to test IPC transfer*****************************/
 /***************setting msgq for IPC data Request******************/
-        mqd_t IPCmsgq;
+        mqd_t IPCmsgqT, IPCmsgqL;
         int IPCmsg_prio = 20;
         int IPCnum_bytes;
         char IPCmessage[BUF_SIZE];
@@ -49,12 +49,21 @@ void *logTask(void *pthread_inf) {
                                        .mq_msgsize = BUF_SIZE, //max size of msg in bytes
                                        .mq_flags = 0};
 
-        IPCmsgq = mq_open(IPC_TEMP_MQ, //name
-                          O_CREAT | O_RDWR, //flags. create a new if dosent already exist
-                          S_IRWXU, //mode-read,write and execute permission
-                          &IPCmsgq_attr); //attribute
-        if(IPCmsgq < 0) {perror("mq_open-logTask Error:"); return NULL;}
-        else printf("IPC Messgae Que Opened in logTask\n");
+        IPCmsgqT = mq_open(IPC_TEMP_MQ, //name
+                           O_CREAT | O_RDWR, //flags. create a new if dosent already exist
+                           S_IRWXU, //mode-read,write and execute permission
+                           &IPCmsgq_attr); //attribute
+        if(IPCmsgqT < 0) {perror("mq_open-logTask Error:"); return NULL;}
+        else printf("IPC temp Messgae Que Opened in logTask\n");
+
+        IPCmsgqL = mq_open(IPC_LIGHT_MQ, //name
+                           O_CREAT | O_RDWR, //flags. create a new if dosent already exist
+                           S_IRWXU, //mode-read,write and execute permission
+                           &IPCmsgq_attr); //attribute
+        if(IPCmsgqL < 0) {perror("mq_open-logTask Error:"); return NULL;}
+        else printf("IPC light Messgae Que Opened in logTask\n");
+
+
 /****************&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&****************/
 
 
@@ -81,7 +90,17 @@ void *logTask(void *pthread_inf) {
                 clock_gettime(CLOCK_MONOTONIC,&now);
                 expire.tv_sec = now.tv_sec+1;
                 expire.tv_nsec = now.tv_nsec;
-                num_bytes = mq_timedreceive(IPCmsgq,
+                num_bytes = mq_timedreceive(IPCmsgqT,
+                                            (char*)log,
+                                            BUF_SIZE,
+                                            &IPCmsg_prio,
+                                            &expire);
+                if(num_bytes>0) {printf("data read on IPC msg Q:%s\n",log->time_stamp);}
+
+                clock_gettime(CLOCK_MONOTONIC,&now);
+                expire.tv_sec = now.tv_sec+1;
+                expire.tv_nsec = now.tv_nsec;
+                num_bytes = mq_timedreceive(IPCmsgqL,
                                             (char*)log,
                                             BUF_SIZE,
                                             &IPCmsg_prio,
@@ -96,6 +115,7 @@ void *logTask(void *pthread_inf) {
         printf("exiting Log task\n");
         fclose(pfd);
         mq_unlink(IPC_TEMP_MQ);
+        mq_unlink(IPC_LIGHT_MQ);
         mq_unlink(MY_MQ);
         mq_close(msgq);
         free(log);

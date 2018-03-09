@@ -10,6 +10,9 @@
 #define SIGLOG_HB  (SIGRTMIN+4)
 
 #define SIGTEMP_IPC (SIGRTMIN+5)
+#define SIGLIGHT_IPC (SIGRTMIN+6)
+
+
 
 sig_atomic_t gclose_light;
 sig_atomic_t gclose_log;

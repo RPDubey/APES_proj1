@@ -6,6 +6,7 @@
 #define MQ_MAXMSG 10
 #define MSG_PRIO  30
 
-#define IPC_TEMP_MQ   "/IPC_MQ"
+#define IPC_TEMP_MQ   "/IPC_TEMP_MQ"
+#define IPC_LIGHT_MQ   "/IPC_LIGHT_MQ"
 
 #endif

@@ -12,11 +12,16 @@
 #include "includes.h"
 #define FREQ_NSEC (1000000000)
 
-/**
- * Thread 1 function
- */
+sig_atomic_t light_IPC_flag;
+
+void LightIPChandler(int sig){
+        if(sig == SIGLIGHT_IPC)
+        {printf("Caught signal LightIPChandler\n");
+         light_IPC_flag = 1;}
+}
 
 void *lightTask(void *pthread_inf) {
+        light_IPC_flag = 0;
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
 /********set periodic timer**********/
@@ -27,7 +32,7 @@ void *lightTask(void *pthread_inf) {
         ret = pthread_mutex_init(&glight_mutex,NULL);
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
-/*******Initialize Message Que*****************/
+/*******Initialize Logger Message Que*****************/
         mqd_t msgq;
         int msg_prio = MSG_PRIO;
         int num_bytes;
@@ -42,6 +47,30 @@ void *lightTask(void *pthread_inf) {
                        &msgq_attr); //attribute
         if(msgq < 0) {perror("mq_open-lightTask Error:"); return NULL;}
         else printf("Messgae Que Opened in lightTask\n");
+
+/***************setting msgq for IPC data Request******************/
+        mqd_t IPCmsgq;
+        int IPCmsg_prio = 20;
+        int IPCnum_bytes;
+
+        struct mq_attr IPCmsgq_attr = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                       .mq_msgsize = BUF_SIZE, //max size of msg in bytes
+                                       .mq_flags = 0};
+
+        IPCmsgq = mq_open(IPC_LIGHT_MQ, //name
+                          O_CREAT | O_RDWR, //flags. create a new if dosent already exist
+                          S_IRWXU, //mode-read,write and execute permission
+                          &IPCmsgq_attr); //attribute
+        if(IPCmsgq < 0) {perror("mq_open-lightTask Error:"); return NULL;}
+        else printf("IPC Messgae Que Opened in lightTask\n");
+
+//set up the signal to request data
+        struct sigaction action;
+        sigemptyset(&action.sa_mask);
+        action.sa_handler = LightIPChandler;
+        ret = sigaction(SIGLIGHT_IPC,&action,NULL);
+        if(ret == -1) { perror("sigaction lightTask"); return NULL; }
+        printf("pid:%d\n",getpid());
 
 /************Creating logpacket*******************/
         log_pack light_log ={.log_level=1,.log_source = light_Task};
@@ -70,10 +99,29 @@ void *lightTask(void *pthread_inf) {
                                     sizeof(log_pack),
                                     msg_prio);
                 if(num_bytes<0) {perror("mq_send-lightTask Err"); gclose_light=0;}
+/******Log data on IPC Que if requested******/
+
+                if(light_IPC_flag == 1) {
+                        light_IPC_flag = 0;
+//set up time for timed send
+                        struct timespec now,expire;
+                        clock_gettime(CLOCK_MONOTONIC,&now);
+                        expire.tv_sec = now.tv_sec+2;
+                        expire.tv_nsec = now.tv_nsec;
+                        num_bytes = mq_timedsend(IPCmsgq,
+                                                 (const char*)&light_log,
+                                                 sizeof(log_pack),
+                                                 IPCmsg_prio,
+                                                 &expire);
+                        if(num_bytes<0) {perror("mq_send-IPC tempTask Error");}
+                        else printf("data put on IPC msg Q\n");
+                }
+
 
         }
         printf("exiting light task\n");
         //timer_delete(timerid);
+        mq_unlink(IPC_LIGHT_MQ);
         mq_unlink(MY_MQ);
         mq_close(msgq);
         return NULL;
