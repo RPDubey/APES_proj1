@@ -50,21 +50,23 @@ void LogHBhandler(int sig){
 
 int main()
 {
+        int ret;
         printf("Entering Main\n");
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
         gtemp_HB_flag = 0; glight_HB_flag = 0;
 /***install SIGINT handler to close application*******/
         signal(SIGINT,SIGINT_handler);
 /*******************Masking SIgnals***********************/
-        // sigset_t mask; //set of signals
-        // sigemptyset(&mask); sigaddset(&mask,SIGTEMP_IPC);
-        // ret = pthread_sigmask(
-        //         SIG_SETMASK, //block the signals in the set argument
-        //         &mask, //set argument has list of blocked signals
-        //         NULL); //if non NULL prev val of signal mask stored here
-        // if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+        sigset_t mask; //set of signals
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT);
+        sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
 
-        int ret;
         pthread_t temp,light,log;
         threadInfo temp_info; temp_info.thread_id = 1; temp_info.main=pthread_self();
         threadInfo light_info; light_info.thread_id = 2; light_info.main=pthread_self();
@@ -112,10 +114,12 @@ int main()
         uint8_t read_bytes; char choice;
         uint8_t light_cancelled=0; uint8_t temp_cancelled=0; uint8_t log_cancelled=0;
         while (gclose_app) {
-                SLEEP(10);
+
 //check HB signals
 
                 printf("M");
+                fflush(stdout);
+
                 if(light_cancelled == 0) {
                         if(glight_HB_flag == 0) printf("NO HB from Light Task\n");
                         else {printf("L"); glight_HB_flag = 0;}
@@ -130,7 +134,6 @@ int main()
                         if(glog_HB_flag == 0) printf("NO HB from Log Task\n");
                         else {printf("l"); glog_HB_flag = 0;}
                 }
-                fflush(stdout);
 
                 printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
 
@@ -158,12 +161,15 @@ int main()
                                 break;
                         case '4':
                                 printf("Closing application\n");
-                                pthread_cancel(temp); pthread_cancel(light);
-                                pthread_cancel(log); gclose_app = 0;
+                                gclose_temp = 0; gclose_light = 0;  gclose_log = 0;
+                                //pthread_cancel(temp); pthread_cancel(light);
+                                //pthread_cancel(log);
+                                gclose_app = 0;
                                 break;
                         }
                         read_bytes = 0;
                 }
+                SLEEP(10);
         }
         pthread_join(temp, NULL);
         pthread_join(light, NULL);

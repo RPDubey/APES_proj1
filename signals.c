@@ -11,7 +11,7 @@
 void SIGINT_handler(int sig){
         if(sig == SIGINT) {
                 gclose_app   = 0;
-                printf("\ncleared gclose flag\n");
+                printf("\ncleared gclose_app flag\n");
         }
 }
 

@@ -12,8 +12,25 @@
 #include "signals.h"
 
 void *logTask(void *pthread_inf) {
-
+        int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
+
+/*****************Mask SIGNALS********************/
+        sigset_t mask; //set of signals
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
+        sigaddset(&mask,SIGLOG_HB);
+
+//unblocking for test
+//sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
+
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+
 /*************create a logger message q****************/
         mqd_t msgq;
         int msg_prio;
