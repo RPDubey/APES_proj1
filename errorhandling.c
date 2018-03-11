@@ -27,10 +27,14 @@ void handle_err(char* arg_msg,mqd_t msgq_err,mqd_t msgq,msg_type type){
         clock_gettime(CLOCK_MONOTONIC,&now);
         expire.tv_sec = now.tv_sec+2;
         expire.tv_nsec = now.tv_nsec;
+        int prio;
+        if (type==init) prio = MSG_PRIO_INIT;
+        else if (type==error) prio = MSG_PRIO_ERR;
+
         num_bytes = mq_timedsend(msgq_err,
                                  (const char*)&err_pack,
                                  sizeof(err_pack),
-                                 MSG_PRIO_ERR,
+                                 prio,
                                  &expire);
         if(num_bytes<0) {perror("mq_send to error Q in handle_err");}
 
@@ -46,7 +50,7 @@ void handle_err(char* arg_msg,mqd_t msgq_err,mqd_t msgq,msg_type type){
         num_bytes = mq_timedsend(msgq,
                                  (const char*)&err_log,
                                  sizeof(log_pack),
-                                 MSG_PRIO_ERR,
+                                 prio,
                                  &expire);
         if(num_bytes<0) {perror("mq_send to log q in handle_err");}
 
@@ -78,8 +82,8 @@ void errorFunction(union sigval sv){
 //reregister for notification
         int ret  = mq_notify(msgq_err,&sig_ev_err);
         if(ret == -1) {perror("mq_notify-errorFunction"); return;}
-
+//what are we supposed to do if initializatio complete
 //change led status???????????????????????????
-//left to do
+//left to do based on err_pack type
         return;
 }

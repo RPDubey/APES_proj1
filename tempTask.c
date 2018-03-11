@@ -22,6 +22,10 @@ void TemptIPChandler(int sig){
 
 void *tempTask(void *pthread_inf) {
 
+        uint8_t init_state = 0;
+        char init_message[5][ sizeof(err_msg_pack) ];
+
+
         temp_IPC_flag = 0;
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
@@ -40,8 +44,18 @@ void *tempTask(void *pthread_inf) {
                            O_CREAT | O_RDWR,//flags. create a new if dosent already exist
                            S_IRWXU, //mode-read,write and execute permission
                            &msgq_attr_err); //attribute
-        if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
-        else printf("Messgae Que Opened in tempTask\n");
+        // if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
+// else printf("Messgae Que Opened in tempTask\n");
+
+        if(msgq_err < 0) {
+                init_state =0;
+                sprintf(&(init_message[0][0]),"mq_open-error_mq-tempTask %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[0][0]),"MessgaeQ Opened in tempTask:%s\n",strerror(errno));
+        }
+
 
 
 /******set periodic timer**************/
@@ -50,7 +64,15 @@ void *tempTask(void *pthread_inf) {
         else printf("Periodic Timer set for Temperature Task\n");
 
         ret = pthread_mutex_init(&gtemp_mutex,NULL);
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+        if(ret == -1) {
+                init_state =0;
+                sprintf(&(init_message[1][0]),"temptask-pthread_mutex_init %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[1][0]),"temptaskpthread_mutex_init:%s\n",strerror(errno));
+        }
+
 
 /*******Initialize Logger Message Que*****************/
         mqd_t msgq;
@@ -65,8 +87,19 @@ void *tempTask(void *pthread_inf) {
                        O_CREAT | O_RDWR,//flags. create a new if dosent already exist
                        S_IRWXU, //mode-read,write and execute permission
                        &msgq_attr); //attribute
-        if(msgq < 0) {perror("mq_open-tempTask Error:"); return NULL;}
-        else printf("Messgae Que Opened in tempTask\n");
+
+        if(msgq < 0) {
+                init_state =0;
+                sprintf(&(init_message[2][0]),"temptask-mq_open-loggerQ %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[2][0]),"temptask-mq_open-loggerQ %s\n",strerror(errno));
+        }
+
+
+
+
 /***************setting msgq for IPC data Request******************/
         mqd_t IPCmsgq;
         int IPCmsg_prio = 20;
@@ -81,16 +114,38 @@ void *tempTask(void *pthread_inf) {
                           O_CREAT | O_RDWR, //flags. create a new if dosent already exist
                           S_IRWXU, //mode-read,write and execute permission
                           &IPCmsgq_attr); //attribute
-        if(IPCmsgq < 0) {perror("mq_open-tempTask Error:"); return NULL;}
-        else printf("IPC Messgae Que Opened in tempTask\n");
-
+        if(IPCmsgq < 0) {
+                init_state =0;
+                sprintf(&(init_message[3][0]),"temptask-mq_open-IPCQ %s\n",strerror(errno));
+        }
+        else {
+                init_state =1;
+                sprintf(&(init_message[3][0]),"temptask-mq_open-IPCQ %s\n",strerror(errno));
+        }
 //set up the signal to request data
         struct sigaction action;
         sigemptyset(&action.sa_mask);
         action.sa_handler = TemptIPChandler;
         ret = sigaction(SIGTEMP_IPC,&action,NULL);
-        if(ret == -1) { perror("sigaction temptask"); return NULL; }
-//        printf("pid:%d\n",getpid());
+
+        if(ret  == -1) {
+                init_state =0;
+                sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
+        }
+        else {
+                init_state =1;
+                sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
+        }
+
+
+        sleep(1);//let other threads initialize
+
+        handle_err(&init_message[0][0],msgq_err,msgq,init);
+        handle_err(&init_message[1][0],msgq_err,msgq,init);
+        handle_err(&init_message[2][0],msgq_err,msgq,init);
+        handle_err(&init_message[3][0],msgq_err,msgq,init);
+        handle_err(&init_message[4][0],msgq_err,msgq,init);
+
 
         struct timespec now,expire;
 
@@ -145,7 +200,7 @@ void *tempTask(void *pthread_inf) {
                         else printf("data put on IPC msg Q\n");
                 }
                 //printf("hi\n");
-                handle_err("Test Error:",msgq_err,msgq,error);
+                handle_err("Test Error",msgq_err,msgq,error);
 
 
         }
