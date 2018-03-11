@@ -27,16 +27,6 @@ void *tempTask(void *pthread_inf) {
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
 
 
-/*****************Mask SIGNALS********************/
-        sigset_t mask; //set of signals
-        sigemptyset(&mask); sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
-        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB); sigaddset(&mask,SIGLOG);
-
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
 /*******Initialize ERROR Message Que*****************/
         mqd_t msgq_err;

@@ -60,6 +60,7 @@ int main()
         gtemp_HB_flag = 0; glight_HB_flag = 0;
 /**************install SIGINT handler to close application through ctrl + c*************/
         signal(SIGINT,SIGINT_handler);
+
 /******initialize error reporting msgq*************************************/
         mqd_t msgq_err;
         int msg_prio_err = MSG_PRIO_ERR;
@@ -156,8 +157,11 @@ int main()
         if (ret != 0) {  printf("Error:%s\n",strerror(errno)); return -1;}
         uint8_t read_bytes; char choice;
         uint8_t light_cancelled=0; uint8_t temp_cancelled=0; uint8_t log_cancelled=0;
+        SLEEP(2);//allow other threads to initialize
+        printf("*************************************************************\n");
+        printf(" Enter thread to close 1-temp; 2-light; 3-log; 4-application\n");
+        printf("*************************************************************\n");
 
-        printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
         while (gclose_app) {
 
 //check HB signals
@@ -179,8 +183,6 @@ int main()
                         else {printf("l*"); glog_HB_flag = 0;}
                 }
                 fflush(stdout);
-
-                //  printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
 
                 read_bytes=read(0,&choice,sizeof(char));
                 if(read_bytes == 1) {
@@ -233,6 +235,6 @@ int main()
 
         printf("Destroyed all opened Msg Ques\n");
 
-        printf("***************Exiting Main***************\n");
+        printf("***************Exiting***************\n");
         return 0;
 }
