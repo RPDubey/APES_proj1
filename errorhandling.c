@@ -14,10 +14,13 @@
 #include "errorhandling.h"
 
 
-void handle_err(char* arg_msg,mqd_t msgq_err,mqd_t msgq){
+void handle_err(char* arg_msg,mqd_t msgq_err,mqd_t msgq,msg_type type){
 //log on error msg q
         char msg[BUF_SIZE];
         sprintf(msg,"%s:%s",arg_msg,strerror(errno));
+        err_msg_pack err_pack={.type=type};
+        strcpy(err_pack.msg, msg);
+
         struct timespec now,expire;
         int num_bytes;
 //log on logegr q
@@ -25,8 +28,8 @@ void handle_err(char* arg_msg,mqd_t msgq_err,mqd_t msgq){
         expire.tv_sec = now.tv_sec+2;
         expire.tv_nsec = now.tv_nsec;
         num_bytes = mq_timedsend(msgq_err,
-                                 msg,
-                                 sizeof(msg),
+                                 (const char*)&err_pack,
+                                 sizeof(err_pack),
                                  MSG_PRIO_ERR,
                                  &expire);
         if(num_bytes<0) {perror("mq_send to error Q in handle_err");}
@@ -65,11 +68,11 @@ void errorFunction(union sigval sv){
 //empty the msgq - notification only for an empty q
         do {
                 num_bytes = mq_timedreceive(msgq_err,
-                                            err_msg,
+                                            (char*)msg_pack,
                                             BUF_SIZE,
                                             NULL,
                                             &expire);
-                if(num_bytes>0) {printf("*%s\n",err_msg);}
+                if(num_bytes>0) {printf("*%s %d\n",( (err_msg_pack*)msg_pack)->msg,( (err_msg_pack*)msg_pack)->type);}
 
         } while(num_bytes>0);
 //reregister for notification

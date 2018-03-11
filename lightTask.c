@@ -133,7 +133,7 @@ void *lightTask(void *pthread_inf) {
                                          sizeof(log_pack),
                                          msg_prio,
                                          &expire);
-                if(num_bytes<0) {handle_err("mq_send-Log Q-lightTask",msgq_err,msgq);}
+                if(num_bytes<0) {handle_err("mq_send-Log Q-lightTask",msgq_err,msgq,error);}
 /******Log data on IPC Que if requested******/
 
                 if(light_IPC_flag == 1) {
@@ -148,7 +148,7 @@ void *lightTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {handle_err("mq_send-IPC-lightTask Error",msgq_err,msgq);}
+                        if(num_bytes<0) {handle_err("mq_send-IPC-lightTask Error",msgq_err,msgq,error);}
                         else printf("data put on IPC msg Q\n");
                 }
 

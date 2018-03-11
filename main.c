@@ -52,8 +52,8 @@ void LogHBhandler(int sig){
 int main()
 {
         int ret;
-        err_msg = (char*)malloc(30);
-        if(err_msg == NULL) {perror("malloc-main"); return -1;}
+        msg_pack = (err_msg_pack*)malloc(sizeof(err_msg_pack));
+        if(msg_pack == NULL) {perror("malloc-main"); return -1;}
 
         printf("Entering Main\n");
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
@@ -231,7 +231,7 @@ int main()
         mq_unlink(IPC_LIGHT_MQ);
         mq_unlink(MY_MQ);
         mq_unlink(MY_MQ_ERR);
-        free(err_msg);
+        free(msg_pack);
 
         printf("Destroyed all opened Msg Ques\n");
 

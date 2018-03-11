@@ -3,6 +3,17 @@
 #define includes_H
 
 #include<stdint.h>
+#include"messageQue.h"
+
+typedef enum{
+init,
+error
+}msg_type;
+
+typedef struct{
+char msg[BUF_SIZE-sizeof(msg_type)];
+msg_type type;
+}err_msg_pack;
 
 typedef enum {
   temperatue_Task,
@@ -10,6 +21,7 @@ typedef enum {
   RemoteRequestSocket_Task,
   error_handler
 }task_type;
+
 
 typedef struct{
 char time_stamp[32];

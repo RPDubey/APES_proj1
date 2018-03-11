@@ -127,7 +127,7 @@ void *tempTask(void *pthread_inf) {
                                          sizeof(log_pack),
                                          msg_prio,
                                          &expire);
-                if(num_bytes<0) {handle_err("mq_send to Log Q in tempTask", msgq_err,msgq);}
+                if(num_bytes<0) {handle_err("mq_send to Log Q in tempTask", msgq_err,msgq,error);}
 /******Log data on IPC Que if requested******/
 
                 if(temp_IPC_flag == 1) {
@@ -141,11 +141,11 @@ void *tempTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {handle_err("mq_send-IPC Q-tempTask Error",msgq_err,msgq);}
+                        if(num_bytes<0) {handle_err("mq_send-IPC Q-tempTask Error",msgq_err,msgq,error);}
                         else printf("data put on IPC msg Q\n");
                 }
                 //printf("hi\n");
-                //  handle_err("Test Error:",msgq_err,msgq);
+                handle_err("Test Error:",msgq_err,msgq,error);
 
 
         }
