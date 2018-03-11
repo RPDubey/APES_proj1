@@ -12,6 +12,20 @@
 #include "includes.h"
 
 sig_atomic_t temp_IPC_flag;
+void handle_err(char* msg,mqd_t msgq_err){
+//log on error msg q
+        struct timespec now,expire;
+        clock_gettime(CLOCK_MONOTONIC,&now);
+        expire.tv_sec = now.tv_sec+2;
+        expire.tv_nsec = now.tv_nsec;
+        int num_bytes = mq_timedsend(msgq_err,
+                                     msg,
+                                     BUF_SIZE,
+                                     MSG_PRIO_ERR,
+                                     &expire);
+        if(num_bytes<0) {perror("mq_send-handle_err-tempTask Error");}
+//log on logegr q
+}
 
 void TemptIPChandler(int sig){
         if(sig == SIGTEMP_IPC)
@@ -29,13 +43,28 @@ void *tempTask(void *pthread_inf) {
 /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask); sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
-        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB); sigaddset(&mask,SIGLOG);
 
         ret = pthread_sigmask(
                 SIG_SETMASK, //block the signals in the set argument
                 &mask, //set argument has list of blocked signals
                 NULL); //if non NULL prev val of signal mask stored here
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+
+/*******Initialize ERROR Message Que*****************/
+        mqd_t msgq_err;
+        int msg_prio_err = MSG_PRIO_ERR;
+        int num_bytes_err;
+        struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                        .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                        .mq_flags = 0};
+
+        msgq_err = mq_open(MY_MQ_ERR, //name
+                           O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                           S_IRWXU, //mode-read,write and execute permission
+                           &msgq_attr_err); //attribute
+        if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
+        else printf("Messgae Que Opened in tempTask\n");
 
 
 /******set periodic timer**************/
@@ -84,7 +113,7 @@ void *tempTask(void *pthread_inf) {
         action.sa_handler = TemptIPChandler;
         ret = sigaction(SIGTEMP_IPC,&action,NULL);
         if(ret == -1) { perror("sigaction temptask"); return NULL; }
-        printf("pid:%d\n",getpid());
+//        printf("pid:%d\n",getpid());
 
         struct timespec now,expire;
 
@@ -140,7 +169,7 @@ void *tempTask(void *pthread_inf) {
                         if(num_bytes<0) {perror("mq_send-IPC Q-tempTask Error");}
                         else printf("data put on IPC msg Q\n");
                 }
-
+                handle_err("error test",msgq_err);
         }
         printf("exiting Temp task\n");
         mq_close(msgq);

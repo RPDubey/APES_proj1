@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <errno.h>
 #include <string.h>
@@ -23,6 +24,37 @@
 sig_atomic_t glight_HB_flag;
 sig_atomic_t gtemp_HB_flag;
 sig_atomic_t glog_HB_flag;
+static char* err_msg;
+static struct sigevent sig_ev;
+static void errorFunction(union sigval sv){
+        if(sv.sival_ptr == NULL) {printf("errorFunction argument\n"); return;}
+        mqd_t msgq_err = *((mqd_t*)sv.sival_ptr);
+        struct timespec now,expire;
+        clock_gettime(CLOCK_MONOTONIC,&now);
+        expire.tv_sec = now.tv_sec+1;
+        expire.tv_nsec = now.tv_nsec;
+        int num_bytes;
+        do {
+                num_bytes = mq_timedreceive(msgq_err,
+                                            err_msg,
+                                            BUF_SIZE,
+                                            NULL,
+                                            &expire);
+                if(num_bytes>0) {printf("***%s\n",err_msg);}
+        } while(num_bytes>0);
+//set up re notification for this error
+        // struct sigevent sig_ev ={
+        //         .sigev_notify=SIGEV_THREAD,         //notify by signal in sigev_signo
+        //         .sigev_notify_function = errorFunction,
+        //         .sigev_notify_attributes=NULL,
+        //         .sigev_value.sival_ptr=&msgq_err      //data passed with notification
+        // };
+
+        int ret  = mq_notify(msgq_err,&sig_ev);
+        if(ret == -1) {perror("mq_notify-errorFunction"); return;}
+
+        return;
+}
 
 void LightHBhandler(int sig){
         if(sig == SIGLIGHT_HB)
@@ -51,16 +83,58 @@ void LogHBhandler(int sig){
 int main()
 {
         int ret;
+        err_msg = (char*)malloc(30);
+        if(err_msg == NULL) {perror("malloc-main"); return -1;}
+
         printf("Entering Main\n");
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
         gtemp_HB_flag = 0; glight_HB_flag = 0;
-/***install SIGINT handler to close application*******/
+/**************install SIGINT handler to close application through ctrl + c*************/
         signal(SIGINT,SIGINT_handler);
+/******initialize error reporting msgq*************************************/
+        mqd_t msgq_err;
+        int msg_prio_err = MSG_PRIO_ERR;
+        int num_bytes_err;
+        struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                        .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                        .mq_flags = 0};
+
+        msgq_err = mq_open(MY_MQ_ERR, //name
+                           O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                           S_IRWXU, //mode-read,write and execute permission
+                           &msgq_attr_err); //attribute
+        if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return -1;}
+        else printf("Messgae Que Opened in tempTask\n");
+//set up notification for this error
+
+        sig_ev.sigev_notify=SIGEV_THREAD;      //notify by signal in sigev_signo
+        sig_ev.sigev_notify_function = errorFunction;
+        sig_ev.sigev_notify_attributes=NULL;
+        sig_ev.sigev_value.sival_ptr=&msgq_err;  //data passed with notification
+
+
+        ret  = mq_notify(msgq_err,&sig_ev);
+        if(ret == -1) {perror("mq_notify-main"); return -1;}
+
+// //set up handler
+//         struct sigaction action;
+//         sigemptyset(&action.sa_mask);
+//         action.sa_handler = LogQNotifyhandler;
+//         ret = sigaction(SIGLOG,&action,NULL);
+//         if(ret == -1) { perror("sigaction temptask"); return NULL; }
+//         printf("pid:%d\n",getpid());
+
+
 /*******************Masking SIgnals***********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask);
         sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT);
         sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
+        sigaddset(&mask,SIGLOG);
+
+        //read the status of global variables when wake up from sleep
+        //sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
+
         ret = pthread_sigmask(
                 SIG_SETMASK, //block the signals in the set argument
                 &mask, //set argument has list of blocked signals
@@ -113,6 +187,8 @@ int main()
         if (ret != 0) {  printf("Error:%s\n",strerror(errno)); return -1;}
         uint8_t read_bytes; char choice;
         uint8_t light_cancelled=0; uint8_t temp_cancelled=0; uint8_t log_cancelled=0;
+
+        printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
         while (gclose_app) {
 
 //check HB signals
@@ -135,7 +211,7 @@ int main()
                         else {printf("l"); glog_HB_flag = 0;}
                 }
 
-                printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
+                //  printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
 
                 read_bytes=read(0,&choice,sizeof(char));
                 if(read_bytes == 1) {
@@ -169,7 +245,8 @@ int main()
                         }
                         read_bytes = 0;
                 }
-                SLEEP(10);
+//                sleep(5)
+                SLEEP(5);
         }
         pthread_join(temp, NULL);
         pthread_join(light, NULL);
@@ -180,6 +257,9 @@ int main()
         mq_unlink(IPC_TEMP_MQ);
         mq_unlink(IPC_LIGHT_MQ);
         mq_unlink(MY_MQ);
+        mq_unlink(MY_MQ_ERR);
+        free(err_msg);
+
         printf("Destroyed all opened Msg Ques\n");
 
         printf("***************Exiting Main***************\n");

@@ -28,7 +28,7 @@ void *lightTask(void *pthread_inf) {
 /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask); sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT_HB);
-        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB); sigaddset(&mask,SIGLOG);
 
         ret = pthread_sigmask(
                 SIG_SETMASK, //block the signals in the set argument

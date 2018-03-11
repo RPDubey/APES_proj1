@@ -12,6 +12,7 @@
 #define SIGTEMP_IPC (SIGRTMAX-5)
 #define SIGLIGHT_IPC (SIGRTMAX-6)
 
+#define SIGLOG (SIGRTMAX-7)
 
 
 sig_atomic_t gclose_light;
