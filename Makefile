@@ -1,7 +1,7 @@
 
 
-main.elf:main.c lightTask.o tempTask.o signals.o logTask.o includes.h
-	gcc -o $@ $^ -lpthread -lrt
+main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o includes.h
+	gcc -g -o $@ $^ -lpthread -lrt
 
 signals.o:signals.c
 	gcc -c -o $@ $<
@@ -13,6 +13,9 @@ lightTask.o:lightTask.c messageQue.h includes.h
 	gcc -c -o $@ $<  -lpthread -lrt
 
 tempTask.o:tempTask.c messageQue.h includes.h
+	gcc -c -o $@ $<  -lpthread -lrt
+
+errorhandling.o:errorhandling.c messageQue.h includes.h
 	gcc -c -o $@ $<  -lpthread -lrt
 
 clean:

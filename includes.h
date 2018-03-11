@@ -7,7 +7,8 @@
 typedef enum {
   temperatue_Task,
   light_Task,
-  RemoteRequestSocket_Task
+  RemoteRequestSocket_Task,
+  error_handler
 }task_type;
 
 typedef struct{

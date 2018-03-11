@@ -10,6 +10,8 @@
 #include "messageQue.h"
 #include <mqueue.h>
 #include "includes.h"
+#include "errorhandling.h"
+
 #define FREQ_NSEC (1000000000)
 
 sig_atomic_t light_IPC_flag;
@@ -35,6 +37,22 @@ void *lightTask(void *pthread_inf) {
                 &mask, //set argument has list of blocked signals
                 NULL); //if non NULL prev val of signal mask stored here
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+
+/*******Initialize ERROR Message Que*****************/
+        mqd_t msgq_err;
+        int msg_prio_err = MSG_PRIO_ERR;
+        int num_bytes_err;
+        struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                        .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                        .mq_flags = 0};
+
+        msgq_err = mq_open(MY_MQ_ERR, //name
+                           O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                           S_IRWXU, //mode-read,write and execute permission
+                           &msgq_attr_err); //attribute
+        if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
+        else printf("Messgae Que Opened in tempTask\n");
+
 
 
 /********set periodic timer**********/
@@ -115,7 +133,7 @@ void *lightTask(void *pthread_inf) {
                                          sizeof(log_pack),
                                          msg_prio,
                                          &expire);
-                if(num_bytes<0) {perror("mq_send-Log Q-lightTask");}
+                if(num_bytes<0) {handle_err("mq_send-Log Q-lightTask",msgq_err,msgq);}
 /******Log data on IPC Que if requested******/
 
                 if(light_IPC_flag == 1) {
@@ -130,7 +148,7 @@ void *lightTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {perror("mq_send-IPC-lightTask Error");}
+                        if(num_bytes<0) {handle_err("mq_send-IPC-lightTask Error",msgq_err,msgq);}
                         else printf("data put on IPC msg Q\n");
                 }
 
@@ -138,6 +156,7 @@ void *lightTask(void *pthread_inf) {
         }
         printf("exiting light task\n");
         mq_close(msgq);
+        mq_close(msgq_err);
         mq_close(IPCmsgq);
         return NULL;
 

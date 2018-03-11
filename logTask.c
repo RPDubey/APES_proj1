@@ -10,7 +10,7 @@
 #include <mqueue.h>
 #include "includes.h"
 #include "signals.h"
-
+#include "errorhandling.h"
 
 // void LogQNotifyhandler(int sig){
 //         if(sig == SIGLOG)
@@ -41,6 +41,23 @@ void *logTask(void *pthread_inf) {
                 NULL); //if non NULL prev val of signal mask stored here
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
+/*******Initialize ERROR Message Que*****************/
+        mqd_t msgq_err;
+        int msg_prio_err = MSG_PRIO_ERR;
+        int num_bytes_err;
+        struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                        .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                        .mq_flags = 0};
+
+        msgq_err = mq_open(MY_MQ_ERR, //name
+                           O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                           S_IRWXU, //mode-read,write and execute permission
+                           &msgq_attr_err); //attribute
+        if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
+        else printf("Messgae Que Opened in tempTask\n");
+
+
+
 /*************create a logger message q****************/
         mqd_t msgq;
         int msg_prio;
@@ -62,25 +79,6 @@ void *logTask(void *pthread_inf) {
         FILE* pfd = fopen("logfile.txt","w");
         if(pfd==NULL) {perror("fopen-logTask Error:"); return NULL;}
         else printf("log file opened in logTask\n");
-
-//set up notification
-//         struct sigevent sig_ev ={
-//                 .sigev_notify=SIGEV_SIGNAL,         //notify by signal in sigev_signo
-//                 .sigev_signo = SIGLOG,         //Notification Signal
-//                 //.sigev_value.sival_ptr=&timerid      //data passed with notification
-//         };
-//         ret  = mq_notify(msgq,&sig_ev);
-//         if(ret == -1) {perror("mq_notify-logTask"); return NULL;}
-// //set up handler
-//         struct sigaction action;
-//         sigemptyset(&action.sa_mask);
-//         action.sa_handler = LogQNotifyhandler;
-//         ret = sigaction(SIGLOG,&action,NULL);
-//         if(ret == -1) { perror("sigaction temptask"); return NULL; }
-//         printf("pid:%d\n",getpid());
-
-
-/**********************************************************************/
 
 
 /*******&&&&&&&&&&&&&& msg Q to test IPC transfer&&&&&&&&&&&&&&&&&&**********************/
@@ -108,23 +106,27 @@ void *logTask(void *pthread_inf) {
         else printf("IPC light Messgae Que Opened in logTask\n");
         struct timespec now,expire;
 
+/*******************Do this in LOOP************************************/
         while(gclose_log & gclose_app)
         {
 
                 pthread_kill(ppthread_info->main,SIGLOG_HB);//send HB
 //read from queue
                 clock_gettime(CLOCK_MONOTONIC,&now);
-                expire.tv_sec = now.tv_sec+1;
+                expire.tv_sec = now.tv_sec+5;
                 expire.tv_nsec = now.tv_nsec;
-                num_bytes=mq_receive(msgq,
-                                     (char*)log,
-                                     BUF_SIZE,
-                                     &msg_prio);
-//set up for notification again
-                // ret  = mq_notify(msgq,&sig_ev);
-// if(ret == -1) {perror("mq_notify-logTask"); return NULL;}
+                //  printf("hi\n");
+                num_bytes=mq_timedreceive(msgq,
+                                          (char*)log,
+                                          BUF_SIZE,
+                                          &msg_prio,
+                                          &expire);
+                //  sleep(1);
+                if(num_bytes<0) {
+                        handle_err("mq_rcv-Log Q-logTask Error",msgq_err,msgq);
+                }
+                //  else printf("hii\n");
 
-                if(num_bytes<0) {perror("mq_rcv-Log Q-logTask Error"); }
 //write to a log file
                 fprintf(pfd,"%s  %d  %d  %s\n\n",
                         ((log_pack*)log)->time_stamp,((log_pack*)log)->log_level,
@@ -158,6 +160,7 @@ void *logTask(void *pthread_inf) {
         printf("exiting Log task\n");
         fclose(pfd);
         mq_close(msgq);
+        mq_close(msgq_err);
         mq_close(IPCmsgqT);
         mq_close(IPCmsgqL);
 

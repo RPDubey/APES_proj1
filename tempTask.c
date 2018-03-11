@@ -10,22 +10,9 @@
 #include "messageQue.h"
 #include <mqueue.h>
 #include "includes.h"
+#include "errorhandling.h"
 
 sig_atomic_t temp_IPC_flag;
-void handle_err(char* msg,mqd_t msgq_err){
-//log on error msg q
-        struct timespec now,expire;
-        clock_gettime(CLOCK_MONOTONIC,&now);
-        expire.tv_sec = now.tv_sec+2;
-        expire.tv_nsec = now.tv_nsec;
-        int num_bytes = mq_timedsend(msgq_err,
-                                     msg,
-                                     BUF_SIZE,
-                                     MSG_PRIO_ERR,
-                                     &expire);
-        if(num_bytes<0) {perror("mq_send-handle_err-tempTask Error");}
-//log on logegr q
-}
 
 void TemptIPChandler(int sig){
         if(sig == SIGTEMP_IPC)
@@ -139,8 +126,6 @@ void *tempTask(void *pthread_inf) {
                 strcpy(temp_log.time_stamp, asctime(tm));
                 strcpy(temp_log.log_msg, "tempTask");
 
-//
-
 /*******Log messages on Que*************/
 //set up time for timed send
 
@@ -152,7 +137,7 @@ void *tempTask(void *pthread_inf) {
                                          sizeof(log_pack),
                                          msg_prio,
                                          &expire);
-                if(num_bytes<0) {perror("mq_send-Log Q-tempTask");}
+                if(num_bytes<0) {handle_err("mq_send to Log Q in tempTask", msgq_err,msgq);}
 /******Log data on IPC Que if requested******/
 
                 if(temp_IPC_flag == 1) {
@@ -166,13 +151,17 @@ void *tempTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {perror("mq_send-IPC Q-tempTask Error");}
+                        if(num_bytes<0) {handle_err("mq_send-IPC Q-tempTask Error",msgq_err,msgq);}
                         else printf("data put on IPC msg Q\n");
                 }
-                handle_err("error test",msgq_err);
+                //printf("hi\n");
+                //  handle_err("Test Error:",msgq_err,msgq);
+
+
         }
         printf("exiting Temp task\n");
         mq_close(msgq);
+        mq_close(msgq_err);
         mq_close(IPCmsgq);
 
         return NULL;

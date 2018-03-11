@@ -11,7 +11,7 @@
 #include "signals.h"
 #include "messageQue.h"
 #include <mqueue.h>
-
+#include "errorhandling.h"
 #define SLEEP(t)      struct timespec current,remaining; \
         current.tv_nsec = 0; current.tv_sec = t; \
         do { \
@@ -24,37 +24,6 @@
 sig_atomic_t glight_HB_flag;
 sig_atomic_t gtemp_HB_flag;
 sig_atomic_t glog_HB_flag;
-static char* err_msg;
-static struct sigevent sig_ev;
-static void errorFunction(union sigval sv){
-        if(sv.sival_ptr == NULL) {printf("errorFunction argument\n"); return;}
-        mqd_t msgq_err = *((mqd_t*)sv.sival_ptr);
-        struct timespec now,expire;
-        clock_gettime(CLOCK_MONOTONIC,&now);
-        expire.tv_sec = now.tv_sec+1;
-        expire.tv_nsec = now.tv_nsec;
-        int num_bytes;
-        do {
-                num_bytes = mq_timedreceive(msgq_err,
-                                            err_msg,
-                                            BUF_SIZE,
-                                            NULL,
-                                            &expire);
-                if(num_bytes>0) {printf("***%s\n",err_msg);}
-        } while(num_bytes>0);
-//set up re notification for this error
-        // struct sigevent sig_ev ={
-        //         .sigev_notify=SIGEV_THREAD,         //notify by signal in sigev_signo
-        //         .sigev_notify_function = errorFunction,
-        //         .sigev_notify_attributes=NULL,
-        //         .sigev_value.sival_ptr=&msgq_err      //data passed with notification
-        // };
-
-        int ret  = mq_notify(msgq_err,&sig_ev);
-        if(ret == -1) {perror("mq_notify-errorFunction"); return;}
-
-        return;
-}
 
 void LightHBhandler(int sig){
         if(sig == SIGLIGHT_HB)
@@ -107,13 +76,13 @@ int main()
         else printf("Messgae Que Opened in tempTask\n");
 //set up notification for this error
 
-        sig_ev.sigev_notify=SIGEV_THREAD;      //notify by signal in sigev_signo
-        sig_ev.sigev_notify_function = errorFunction;
-        sig_ev.sigev_notify_attributes=NULL;
-        sig_ev.sigev_value.sival_ptr=&msgq_err;  //data passed with notification
+        sig_ev_err.sigev_notify=SIGEV_THREAD;      //notify by signal in sigev_signo
+        sig_ev_err.sigev_notify_function = errorFunction;
+        sig_ev_err.sigev_notify_attributes=NULL;
+        sig_ev_err.sigev_value.sival_ptr=&msgq_err;  //data passed with notification
 
 
-        ret  = mq_notify(msgq_err,&sig_ev);
+        ret  = mq_notify(msgq_err,&sig_ev_err);
         if(ret == -1) {perror("mq_notify-main"); return -1;}
 
 // //set up handler
@@ -194,7 +163,6 @@ int main()
 //check HB signals
 
                 printf("M");
-                fflush(stdout);
 
                 if(light_cancelled == 0) {
                         if(glight_HB_flag == 0) printf("NO HB from Light Task\n");
@@ -208,14 +176,15 @@ int main()
 
                 if(log_cancelled == 0) {
                         if(glog_HB_flag == 0) printf("NO HB from Log Task\n");
-                        else {printf("l"); glog_HB_flag = 0;}
+                        else {printf("l*"); glog_HB_flag = 0;}
                 }
+                fflush(stdout);
 
                 //  printf("\nEnter thread to close 1-temp; 2-light; 3-log; 4-application\n");
 
                 read_bytes=read(0,&choice,sizeof(char));
                 if(read_bytes == 1) {
-                        printf("choice:%c\n",choice);
+                        printf("\nchoice:%c\n",choice);
                         switch(choice) {
                         case '1':
                                 if(temp_cancelled == 0) {
@@ -245,6 +214,7 @@ int main()
                         }
                         read_bytes = 0;
                 }
+
 //                sleep(5)
                 SLEEP(5);
         }
@@ -252,6 +222,7 @@ int main()
         pthread_join(light, NULL);
         pthread_join(log, NULL);
         printf("Joined all threads\n");
+        mq_close(msgq_err);
 
 /*********destroy message Ques***********************/
         mq_unlink(IPC_TEMP_MQ);
