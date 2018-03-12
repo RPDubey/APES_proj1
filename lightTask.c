@@ -122,13 +122,31 @@ void *lightTask(void *pthread_inf) {
                 init_state =1;
                 sprintf(&(init_message[4][0]),"sigaction lightTask %s\n",strerror(errno));
         }
+        sleep(2);//allow other threads to Initialize
+
+/*****************Mask SIGNALS********************/
+        sigset_t mask; //set of signals
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGLIGHT_HB);
+        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGCONT);
+
+//unblocking for test
+//sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
+
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+
+
 //send initialization status
         handle_err(&init_message[0][0],msgq_err,msgq,init);
         handle_err(&init_message[1][0],msgq_err,msgq,init);
         handle_err(&init_message[2][0],msgq_err,msgq,init);
         handle_err(&init_message[3][0],msgq_err,msgq,init);
         handle_err(&init_message[4][0],msgq_err,msgq,init);
-
 
 /************Creating logpacket*******************/
         log_pack light_log ={.log_level=1,.log_source = light_Task};

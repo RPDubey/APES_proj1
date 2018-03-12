@@ -58,6 +58,18 @@ int main()
         printf("Entering Main- PID:%d %ld\n",getpid(), sizeof(log_pack));
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
         gclose_socket = 1; gtemp_HB_flag = 0; glight_HB_flag = 0;
+
+/*******************Masking SIgnals***********************/
+
+//this thread will be inherited by all
+        sigset_t mask, mask_all; //set of signals
+        sigfillset(&mask_all);
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask_all, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+
 /**************install SIGINT handler to close application through ctrl + c*************/
         signal(SIGINT,SIGINT_handler);
 
@@ -94,22 +106,6 @@ int main()
 //         if(ret == -1) { perror("sigaction temptask"); return NULL; }
 //         printf("pid:%d\n",getpid());
 
-
-/*******************Masking SIgnals***********************/
-        sigset_t mask; //set of signals
-        sigemptyset(&mask);
-        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT);
-        sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
-        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
-
-        //read the status of global variables when wake up from sleep
-        //sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
-
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
 
         pthread_t temp,light,log,socket;
         threadInfo temp_info; temp_info.thread_id = 1; temp_info.main=pthread_self();
@@ -165,6 +161,19 @@ int main()
         uint8_t light_cancelled=0; uint8_t temp_cancelled=0;
         uint8_t log_cancelled=0; uint8_t socket_cancelled=0;
         SLEEP(2);//allow other threads to initialize
+// required masks for main
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT);
+        sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
+        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
+
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
+
+
         printf("\n*******************************************************************\n");
         printf(" Enter thread to close 1-temp 2-light 3-log 4-socket 5-application\n");
         printf("*******************************************************************\n");

@@ -39,19 +39,6 @@ void light_sig_handler(int sig){
 
 int setTempTimer(){
         int ret;
-/*****************Mask SIGNALS********************/
-        sigset_t mask; //set of signals
-        sigemptyset(&mask);
-        sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
-        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
-        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
-
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
-
 /****** creating RT signal SIGTEMP with SA_RESTART flag for which 1 parameter
  *** .sa_handler should be used for handler function(not .sa_sigaction)********/
 
@@ -59,7 +46,7 @@ int setTempTimer(){
                 .sa_flags = SA_RESTART,                  //three arguments
                 .sa_handler = temp_sig_handler        //one arg method
         };
-        sig_act.sa_mask = mask;
+//        sig_act.sa_mask = mask;
         ret = sigaction(SIGTEMP,&sig_act,NULL);
         if(ret == -1) { perror("sigaction setTempTimer"); return -1; }
 /***********************Creating the timer*********************/
@@ -98,22 +85,6 @@ int setTempTimer(){
 
 int setLightTimer(){
         int ret;
-/*****************Mask SIGNALS********************/
-        sigset_t mask; //set of signals
-        sigemptyset(&mask);
-        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
-        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGLIGHT_HB);
-        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGCONT);
-
-//unblocking for test
-//sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
-
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
-
 /****** creating RT signal SIGRTMIN+1 with SA_RESTART flag for which 1 parameter
    .sa_handler should be used for handler function(not .sa_sigaction)********/
 
@@ -121,7 +92,7 @@ int setLightTimer(){
                 .sa_flags = SA_RESTART,          //three arguments
                 .sa_handler = light_sig_handler //one arg method
         };
-        sig_act.sa_mask=mask;
+        //  sig_act.sa_mask=mask;
         ret = sigaction(SIGLIGHT,&sig_act,NULL);
         if(ret == -1) { perror("sigaction setLightTimer"); return -1; }
 

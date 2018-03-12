@@ -23,20 +23,6 @@
 void *socketTask(void *pthread_inf) {
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
-/*****************Mask SIGNALS********************/
-        sigset_t mask; //set of signals
-        sigemptyset(&mask);
-        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
-        sigaddset(&mask,SIGLIGHT_HB); sigaddset(&mask,SIGLIGHT);
-        sigaddset(&mask,SIGLOG_HB);  sigaddset(&mask,SIGLOG);
-        sigaddset(&mask,SIGTEMP_IPC);  sigaddset(&mask,SIGLIGHT_IPC);
-
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
-
 
 /*************Sockets*****************************/
 //user defined data structures for data read and write
@@ -84,6 +70,23 @@ void *socketTask(void *pthread_inf) {
 /****block until the client connects to the server and gets its address*****/
         struct sockaddr_in client_addr;
         socklen_t addrlen = sizeof(client_addr);         //size of address of client
+
+        sleep(1);//allow other threads to initialize
+/*****************Mask SIGNALS********************/
+        sigset_t mask; //set of signals
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLIGHT_HB); sigaddset(&mask,SIGLIGHT);
+        sigaddset(&mask,SIGLOG_HB);  sigaddset(&mask,SIGLOG);
+        sigaddset(&mask,SIGTEMP_IPC);  sigaddset(&mask,SIGLIGHT_IPC);
+
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+
+
 
 //keep doing this repeatedly
         while(gclose_socket & gclose_app) {

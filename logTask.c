@@ -22,26 +22,6 @@ void *logTask(void *pthread_inf) {
 
 //log_data_flag=0;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
-/*****************Mask SIGNALS********************/
-        sigset_t mask; //set of signals
-        sigemptyset(&mask);
-        sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
-        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
-        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
-
-        ret = pthread_sigmask(
-                SIG_SETMASK, //block the signals in the set argument
-                &mask, //set argument has list of blocked signals
-                NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) {
-                init_state =0;
-                sprintf(&(init_message[0][0]),"logTask Sigmask %s\n",strerror(errno));
-        }
-        else {
-                init_state =0;
-                sprintf(&(init_message[0][0]),"logTask Sigmask:%s\n",strerror(errno));
-        }
-
 
 /*******Initialize ERROR Message Que*****************/
         mqd_t msgq_err;
@@ -103,7 +83,27 @@ void *logTask(void *pthread_inf) {
                 sprintf(&(init_message[3][0]),"fopen-logTask %s\n",strerror(errno));
         }
 
-        sleep(1); ////let all threads initialize
+        sleep(2); ////let all threads initialize
+/*****************Mask SIGNALS********************/
+        sigset_t mask; //set of signals
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
+        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
+
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) {
+                init_state =0;
+                sprintf(&(init_message[0][0]),"logTask Sigmask %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[0][0]),"logTask Sigmask:%s\n",strerror(errno));
+        }
+//send initialization message
         handle_err(&init_message[0][0],msgq_err,msgq,init);
         handle_err(&init_message[1][0],msgq_err,msgq,init);
         handle_err(&init_message[2][0],msgq_err,msgq,init);

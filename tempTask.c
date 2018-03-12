@@ -24,8 +24,6 @@ void *tempTask(void *pthread_inf) {
 
         uint8_t init_state = 0;
         char init_message[5][ sizeof(err_msg_pack) ];
-
-
         temp_IPC_flag = 0;
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
@@ -131,7 +129,19 @@ void *tempTask(void *pthread_inf) {
                 sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
         }
 
-        sleep(1);//let other threads initialize
+        sleep(2);//let other threads initialize
+/*****************Mask SIGNALS********************/
+        sigset_t mask; //set of signals
+        sigemptyset(&mask);
+        sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
+        sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
+        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
+
+        ret = pthread_sigmask(
+                SIG_SETMASK, //block the signals in the set argument
+                &mask, //set argument has list of blocked signals
+                NULL); //if non NULL prev val of signal mask stored here
+        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
 //send initialization status
         handle_err(&init_message[0][0],msgq_err,msgq,init);
