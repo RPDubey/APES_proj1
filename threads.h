@@ -49,4 +49,14 @@ void *tempTask(void *pthread_inf);
 */
 void *logTask(void *pthread_inf);
 
+
+
+/**
+*@brief:Implements socketTask
+*Receives socket requests,based on the request probes the light or temp sensor for data *and sends it back to the requestee.
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *socketTask(void *pthread_inf);
+
 #endif

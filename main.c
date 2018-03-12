@@ -57,7 +57,7 @@ int main()
         if(msg_pack == NULL) {perror("malloc-main"); return -1;}
         printf("Entering Main- PID:%d %ld\n",getpid(), sizeof(log_pack));
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
-        gtemp_HB_flag = 0; glight_HB_flag = 0;
+        gclose_socket = 1; gtemp_HB_flag = 0; glight_HB_flag = 0;
 /**************install SIGINT handler to close application through ctrl + c*************/
         signal(SIGINT,SIGINT_handler);
 
@@ -100,7 +100,7 @@ int main()
         sigemptyset(&mask);
         sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT);
         sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);
-        sigaddset(&mask,SIGLOG);
+        sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
 
         //read the status of global variables when wake up from sleep
         //sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
@@ -111,10 +111,11 @@ int main()
                 NULL); //if non NULL prev val of signal mask stored here
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return -1; }
 
-        pthread_t temp,light,log;
+        pthread_t temp,light,log,socket;
         threadInfo temp_info; temp_info.thread_id = 1; temp_info.main=pthread_self();
         threadInfo light_info; light_info.thread_id = 2; light_info.main=pthread_self();
         threadInfo log_info; log_info.thread_id = 3; log_info.main=pthread_self();
+        threadInfo socket_info; socket_info.thread_id = 3; socket_info.main=pthread_self();
 
 //Register Light HB signal
         struct sigaction action;
@@ -136,6 +137,11 @@ int main()
         ret = sigaction(SIGLOG_HB,&action,NULL);
         if(ret == -1) { perror("sigaction main"); return -1; }
 
+        ret = pthread_create(  &socket,
+                               DEFAULT_THREAD_ATTR,
+                               socketTask,
+                               (void *)&(socket_info) );
+        if (ret != 0) {  printf("Error:%s\n",strerror(errno)); return -1;}
 
 
         ret = pthread_create(  &temp,
@@ -156,11 +162,12 @@ int main()
                                (void *)&(log_info) );
         if (ret != 0) {  printf("Error:%s\n",strerror(errno)); return -1;}
         uint8_t read_bytes; char choice;
-        uint8_t light_cancelled=0; uint8_t temp_cancelled=0; uint8_t log_cancelled=0;
+        uint8_t light_cancelled=0; uint8_t temp_cancelled=0;
+        uint8_t log_cancelled=0; uint8_t socket_cancelled=0;
         SLEEP(2);//allow other threads to initialize
-        printf("*************************************************************\n");
-        printf(" Enter thread to close 1-temp; 2-light; 3-log; 4-application\n");
-        printf("*************************************************************\n");
+        printf("\n*******************************************************************\n");
+        printf(" Enter thread to close 1-temp 2-light 3-log 4-socket 5-application\n");
+        printf("*******************************************************************\n");
 
         while (gclose_app) {
 
@@ -207,8 +214,17 @@ int main()
                                 }
                                 break;
                         case '4':
+                                if(socket_cancelled == 0) {
+                                        printf("sending close signal to socket task\n");
+                                        gclose_socket = 0; pthread_kill(socket,SIGCONT);
+                                        socket_cancelled = 1;
+                                }
+                                break;
+
+                        case '5':
                                 printf("Closing application\n");
                                 gclose_temp = 0; gclose_light = 0;  gclose_log = 0;
+                                gclose_socket = 0; pthread_kill(socket,SIGCONT);
                                 //pthread_cancel(temp); pthread_cancel(light);
                                 //pthread_cancel(log);
                                 gclose_app = 0;

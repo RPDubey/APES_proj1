@@ -30,18 +30,6 @@ void *lightTask(void *pthread_inf) {
         light_IPC_flag = 0;
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
-
-// /*****************Mask SIGNALS********************/
-//         sigset_t mask; //set of signals
-//         sigemptyset(&mask); sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGLIGHT_HB);
-//         sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB); sigaddset(&mask,SIGLOG);
-//
-//         ret = pthread_sigmask(
-//                 SIG_SETMASK, //block the signals in the set argument
-//                 &mask, //set argument has list of blocked signals
-//                 NULL); //if non NULL prev val of signal mask stored here
-//         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
-
 /*******Initialize ERROR Message Que*****************/
         mqd_t msgq_err;
         int msg_prio_err = MSG_PRIO_ERR;

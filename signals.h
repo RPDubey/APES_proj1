@@ -18,6 +18,7 @@
 sig_atomic_t gclose_light;
 sig_atomic_t gclose_log;
 sig_atomic_t gclose_temp;
+sig_atomic_t gclose_socket;
 sig_atomic_t gclose_app;
 
 /**

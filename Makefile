@@ -1,6 +1,6 @@
 
 
-main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o includes.h
+main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o socketTask.o includes.h
 	gcc -g -o $@ $^ -lpthread -lrt
 
 signals.o:signals.c
@@ -17,6 +17,9 @@ tempTask.o:tempTask.c messageQue.h includes.h
 
 errorhandling.o:errorhandling.c messageQue.h includes.h
 	gcc -c -o $@ $<  -lpthread -lrt
+
+socketTask.o:socketTask.c includes.h
+	gcc -c -o $@ $<  -lpthread
 
 clean:
 	rm -f *.o *.elf logfile.txt

@@ -5,6 +5,8 @@
 #include<stdint.h>
 #include"messageQue.h"
 
+#define PORT 8080
+
 typedef enum{
 init,
 error
@@ -30,5 +32,14 @@ char log_msg[BUF_SIZE -100];
 uint8_t log_level;
 
 }log_pack;
+
+typedef enum{
+temp,
+light
+}sensor_type;
+//request structure
+  typedef struct {
+  sensor_type sensor;
+  }sock_req;
 
 #endif
