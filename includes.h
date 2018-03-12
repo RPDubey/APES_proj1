@@ -25,9 +25,10 @@ typedef enum {
 
 typedef struct{
 char time_stamp[32];
-uint8_t log_level;
 task_type log_source;
-char log_msg[16];
+char log_msg[BUF_SIZE -100];
+uint8_t log_level;
+
 }log_pack;
 
 #endif

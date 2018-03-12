@@ -12,16 +12,14 @@
 #include "signals.h"
 #include "errorhandling.h"
 
-// void LogQNotifyhandler(int sig){
-//         if(sig == SIGLOG)
-//                 printf("received data\n");
-//
-// }
 
 sig_atomic_t log_data_flag;
 
 void *logTask(void *pthread_inf) {
         int ret;
+        uint8_t init_state = 0;
+        char init_message[4][ sizeof(err_msg_pack) ];
+
 //log_data_flag=0;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
 /*****************Mask SIGNALS********************/
@@ -35,8 +33,14 @@ void *logTask(void *pthread_inf) {
                 SIG_SETMASK, //block the signals in the set argument
                 &mask, //set argument has list of blocked signals
                 NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
-
+        if(ret == -1) {
+                init_state =0;
+                sprintf(&(init_message[0][0]),"logTask Sigmask %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[0][0]),"logTask Sigmask:%s\n",strerror(errno));
+        }
 
 
 /*******Initialize ERROR Message Que*****************/
@@ -51,8 +55,14 @@ void *logTask(void *pthread_inf) {
                            O_CREAT | O_RDWR,//flags. create a new if dosent already exist
                            S_IRWXU, //mode-read,write and execute permission
                            &msgq_attr_err); //attribute
-        if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
-        else printf("Messgae Que Opened in tempTask\n");
+        if(msgq_err < 0) {
+                init_state =0;
+                sprintf(&(init_message[1][0]),"mq_open-error_mq-logTask %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[1][0]),"mq_open-error_mq-logTask:%s\n",strerror(errno));
+        }
 
 
 
@@ -71,36 +81,37 @@ void *logTask(void *pthread_inf) {
                        O_CREAT | O_RDWR,//flags. create a new if dosent already exist
                        S_IRWXU, //mode-read,write and execute permission
                        &msgq_attr); //attribute
-        if(msgq < 0) {perror("mq_open-logTask Error:"); return NULL;}
-        else printf("Messgae Que Opened in logTask\n");
-//************set up notification
-
-// //set up handler
-//         struct sigaction action;
-//         action.sa_mask = mask;
-//         action.sa_handler = LogQNotifyhandler;
-//         ret = sigaction(SIGLOG,&action,NULL);
-//         if(ret == -1) { perror("sigaction temptask"); return NULL; }
-// //        printf("pid:%d\n",getpid());
-//
-//         struct sigevent sig_ev ={
-//                 .sigev_notify=SIGEV_SIGNAL,    //notify by signal in sigev_signo
-//                 .sigev_signo = SIGLOG,    //Notification Signal
-//                 //.sigev_value.sival_ptr=&timerid    //data passed with notification
-//         };
-//
-//         ret  = mq_notify(msgq,&sig_ev);
-//         if(ret == -1) {perror("mq_notify-main"); return NULL;}
-
-
+        if(msgq < 0) {
+                init_state =0;
+                sprintf(&(init_message[2][0]),"logTask-mq_open-loggerQ %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[2][0]),"logTask-mq_open-loggerQ %s\n",strerror(errno));
+        }
 
 //open a file to write to
         FILE* pfd = fopen("logfile.txt","w");
         if(pfd==NULL) {perror("fopen-logTask Error:"); return NULL;}
         else printf("log file opened in logTask\n");
+        if(pfd==NULL) {
+                init_state =0;
+                sprintf(&(init_message[3][0]),"fopen-logTask: %s\n",strerror(errno));
+        }
+        else {
+                init_state =0;
+                sprintf(&(init_message[3][0]),"fopen-logTask %s\n",strerror(errno));
+        }
 
+        sleep(1); ////let all threads initialize
+        handle_err(&init_message[0][0],msgq_err,msgq,init);
+        handle_err(&init_message[1][0],msgq_err,msgq,init);
+        handle_err(&init_message[2][0],msgq_err,msgq,init);
+        handle_err(&init_message[3][0],msgq_err,msgq,init);
 
 /*******&&&&&&&&&&&&&& msg Q to test IPC transfer&&&&&&&&&&&&&&&&&&**********************/
+#ifdef PRINT_IPC_MSGQ
+
         mqd_t IPCmsgqT, IPCmsgqL;
         int IPCmsg_prio = 20;
         int IPCnum_bytes;
@@ -123,7 +134,12 @@ void *logTask(void *pthread_inf) {
                            &IPCmsgq_attr); //attribute
         if(IPCmsgqL < 0) {perror("mq_open-logTask Error:"); return NULL;}
         else printf("IPC light Messgae Que Opened in logTask\n");
+#endif
         struct timespec now,expire;
+
+
+
+
 
 /*******************Do this in LOOP************************************/
         while(gclose_log & gclose_app)
@@ -158,7 +174,7 @@ void *logTask(void *pthread_inf) {
 
 /*****&&&&&&&&&&&&&&&&&&& printing data for IPC message Q test &&&&&&&&&&&&&&&&&*******/
 
-
+#ifdef PRINT_IPC_MSGQ
                 clock_gettime(CLOCK_MONOTONIC,&now);
                 expire.tv_sec = now.tv_sec+1;
                 expire.tv_nsec = now.tv_nsec;
@@ -178,15 +194,18 @@ void *logTask(void *pthread_inf) {
                                             &IPCmsg_prio,
                                             &expire);
                 if(num_bytes>0) {printf("data read on IPC msg Q:%s\n",log->time_stamp);}
+#endif
                 sleep(1);
         }
+
         printf("exiting Log task\n");
         fclose(pfd);
         mq_close(msgq);
         mq_close(msgq_err);
+#ifdef PRINT_IPC_MSGQ
         mq_close(IPCmsgqT);
         mq_close(IPCmsgqL);
-
+#endif
         free(log);
         return NULL;
 }

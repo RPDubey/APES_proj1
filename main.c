@@ -53,9 +53,9 @@ int main()
 {
         int ret;
         msg_pack = (err_msg_pack*)malloc(sizeof(err_msg_pack));
+//pthread_mutex_init
         if(msg_pack == NULL) {perror("malloc-main"); return -1;}
-
-        printf("Entering Main\n");
+        printf("Entering Main- PID:%d %ld\n",getpid(), sizeof(log_pack));
         gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
         gtemp_HB_flag = 0; glight_HB_flag = 0;
 /**************install SIGINT handler to close application through ctrl + c*************/

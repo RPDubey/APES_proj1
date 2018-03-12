@@ -72,8 +72,6 @@ void *tempTask(void *pthread_inf) {
                 init_state =0;
                 sprintf(&(init_message[1][0]),"temptaskpthread_mutex_init:%s\n",strerror(errno));
         }
-
-
 /*******Initialize Logger Message Que*****************/
         mqd_t msgq;
         int msg_prio = 30;
@@ -96,10 +94,6 @@ void *tempTask(void *pthread_inf) {
                 init_state =0;
                 sprintf(&(init_message[2][0]),"temptask-mq_open-loggerQ %s\n",strerror(errno));
         }
-
-
-
-
 /***************setting msgq for IPC data Request******************/
         mqd_t IPCmsgq;
         int IPCmsg_prio = 20;
@@ -137,25 +131,23 @@ void *tempTask(void *pthread_inf) {
                 sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
         }
 
-
         sleep(1);//let other threads initialize
 
+//send initialization status
         handle_err(&init_message[0][0],msgq_err,msgq,init);
         handle_err(&init_message[1][0],msgq_err,msgq,init);
         handle_err(&init_message[2][0],msgq_err,msgq,init);
         handle_err(&init_message[3][0],msgq_err,msgq,init);
         handle_err(&init_message[4][0],msgq_err,msgq,init);
 
-
-        struct timespec now,expire;
-
 /************Creating logpacket*******************/
         log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
+        struct timespec now,expire;
 
 /****************Do this periodically*******************************/
         while(gclose_temp & gclose_app) {
 
-                pthread_kill(ppthread_info->main,SIGTEMP_HB);//send HB
+//wait for next second
                 pthread_mutex_lock(&gtemp_mutex);
                 while(gtemp_flag == 0) {
                         pthread_cond_wait(&gtemp_condition,&gtemp_mutex);
@@ -163,6 +155,8 @@ void *tempTask(void *pthread_inf) {
 
                 pthread_mutex_unlock(&gtemp_mutex);
                 gtemp_flag = 0;
+//send HB
+                pthread_kill(ppthread_info->main,SIGTEMP_HB);
 //collect temperatue
 
 /************populate the log packet*********/
@@ -200,7 +194,7 @@ void *tempTask(void *pthread_inf) {
                         else printf("data put on IPC msg Q\n");
                 }
                 //printf("hi\n");
-                handle_err("Test Error",msgq_err,msgq,error);
+                //  handle_err("Test Error",msgq_err,msgq,error);
 
 
         }

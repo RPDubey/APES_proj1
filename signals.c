@@ -80,7 +80,7 @@ int setTempTimer(){
 
 /******************* start the timer*******************/
         struct itimerspec its={
-                .it_value.tv_sec=2,      //start after 2 seconds(initial value)
+                .it_value.tv_sec=3,      //start after 3 seconds(initial value)
                 .it_value.tv_nsec=0,
                 .it_interval.tv_sec=FREQ_NSEC/1000000000,
                 .it_interval.tv_nsec=FREQ_NSEC%1000000000
@@ -143,7 +143,7 @@ int setLightTimer(){
 
 /******************* start the timer*******************/
         struct itimerspec its={
-                .it_value.tv_sec=2, //start after 2 seconds(initial value)
+                .it_value.tv_sec=3, //start after 3 seconds(initial value)
                 .it_value.tv_nsec=0,
                 .it_interval.tv_sec=FREQ_NSEC/1000000000,
                 .it_interval.tv_nsec=FREQ_NSEC%1000000000
