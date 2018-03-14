@@ -11,6 +11,7 @@
 #include <mqueue.h>
 #include "includes.h"
 #include "errorhandling.h"
+#include "./sensors/tmp102Sensor.h"
 
 sig_atomic_t temp_IPC_flag;
 
@@ -23,7 +24,7 @@ void TemptIPChandler(int sig){
 void *tempTask(void *pthread_inf) {
 
         uint8_t init_state = 0;
-        char init_message[5][ sizeof(err_msg_pack) ];
+        char init_message[6][ sizeof(err_msg_pack) ];
         temp_IPC_flag = 0;
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
@@ -128,6 +129,18 @@ void *tempTask(void *pthread_inf) {
                 init_state =1;
                 sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
         }
+        int temp = initializeTemp();
+        char temp_data[2], data_cel_str[BUF_SIZE-200];
+        float data_cel;
+
+        if(temp  == -1) {
+                init_state =0;
+                sprintf(&(init_message[5][0]),"i2c init fail\n");
+        }
+        else {
+                init_state =1;
+                sprintf(&(init_message[5][0]),"i2c init success\n");
+        }
 
         sleep(2);//let other threads initialize
 /*****************Mask SIGNALS********************/
@@ -149,6 +162,7 @@ void *tempTask(void *pthread_inf) {
         handle_err(&init_message[2][0],msgq_err,msgq,init);
         handle_err(&init_message[3][0],msgq_err,msgq,init);
         handle_err(&init_message[4][0],msgq_err,msgq,init);
+        handle_err(&init_message[5][0],msgq_err,msgq,init);
 
 /************Creating logpacket*******************/
         log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
@@ -168,12 +182,16 @@ void *tempTask(void *pthread_inf) {
 //send HB
                 pthread_kill(ppthread_info->main,SIGTEMP_HB);
 //collect temperatue
+                temperatureRead(temp,temp_data);
+                data_cel = temperatureConv(CELCIUS,temp_data);
 
 /************populate the log packet*********/
 
                 time_t t = time(NULL); struct tm *tm = localtime(&t);
                 strcpy(temp_log.time_stamp, asctime(tm));
-                strcpy(temp_log.log_msg, "tempTask");
+
+                sprintf(data_cel_str,"temperature %f", data_cel);
+                strcpy(temp_log.log_msg, data_cel_str);
 
 /*******Log messages on Que*************/
 //set up time for timed send
