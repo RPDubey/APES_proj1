@@ -123,7 +123,19 @@ void *lightTask(void *pthread_inf) {
                 sprintf(&(init_message[4][0]),"sigaction lightTask %s\n",strerror(errno));
         }
 
+/************Init light sensor********************/
+        int light = initializeLight();
+        char lightbuffer[1];
+        commandReg(light,CONTROL,WRITE);
+        controlReg(light,WRITE,ENABLE,lightbuffer);
+
+        float lumen;
+        char data_lumen_str[BUF_SIZE-200];
+        uint16_t ch0,ch1;
+
         sleep(2);//allow other threads to Initialize
+
+
 /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask);
@@ -164,11 +176,16 @@ void *lightTask(void *pthread_inf) {
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
 
+/*************collect data*****************/
+                ch0=adcDataRead(light,0);
+                ch1=adcDataRead(light,1);
+                lumen = reportLumen(ch0, ch1);
 
 /************populate the log packet*********/
                 time_t t = time(NULL); struct tm *tm = localtime(&t);
                 strcpy(light_log.time_stamp, asctime(tm));
-                strcpy(light_log.log_msg, "Light task");
+                sprintf(data_lumen_str,"lumen %f", lumen);
+                strcpy(light_log.log_msg, data_lumen_str);
 
 /************Log messages on Que*************/
                 //  sleep(30);
