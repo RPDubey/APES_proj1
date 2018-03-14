@@ -1,7 +1,7 @@
 
 
-main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o socketTask.o includes.h i2cWrapper.o tmp102Sensor.o
-	gcc -g -o $@ $^ -lpthread -lrt
+main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o socketTask.o includes.h i2cWrapper.o tmp102Sensor.o adps9301Sensor.o
+	gcc -g -o $@ $^ -lpthread -lrt -lm
 
 signals.o:signals.c
 	gcc -c -o $@ $<
@@ -24,8 +24,11 @@ socketTask.o:socketTask.c includes.h
 tmp102Sensor.o:./sensors/tmp102Sensor.c ./sensors/i2cWrapper.c
 	gcc -c -o $@ $<
 
+adps9301Sensor.o:./sensors/adps9301Sensor.c ./sensors/i2cWrapper.o
+	gcc -c -o $@ $< -lm
+
 i2cWrapper.o:./sensors/i2cWrapper.c
 	gcc -c -o $@ $<
 
 clean:
-	rm -f *.o *.elf logfile.txt
+	rm -f *.o *.elf logfile.txt ./sensors/*.o

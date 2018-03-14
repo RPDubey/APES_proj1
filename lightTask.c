@@ -11,7 +11,7 @@
 #include <mqueue.h>
 #include "includes.h"
 #include "errorhandling.h"
-
+#include "./sensors/adps9301Sensor.h"
 #define FREQ_NSEC (1000000000)
 
 sig_atomic_t light_IPC_flag;
@@ -122,8 +122,8 @@ void *lightTask(void *pthread_inf) {
                 init_state =1;
                 sprintf(&(init_message[4][0]),"sigaction lightTask %s\n",strerror(errno));
         }
-        sleep(2);//allow other threads to Initialize
 
+        sleep(2);//allow other threads to Initialize
 /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask);
@@ -140,7 +140,6 @@ void *lightTask(void *pthread_inf) {
                 NULL); //if non NULL prev val of signal mask stored here
         if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
 
-
 //send initialization status
         handle_err(&init_message[0][0],msgq_err,msgq,init);
         handle_err(&init_message[1][0],msgq_err,msgq,init);
@@ -151,6 +150,8 @@ void *lightTask(void *pthread_inf) {
 /************Creating logpacket*******************/
         log_pack light_log ={.log_level=1,.log_source = light_Task};
         struct timespec now,expire;
+
+
 /****************Do this periodically*******************************/
         while(gclose_light & gclose_app) {
 
@@ -162,12 +163,13 @@ void *lightTask(void *pthread_inf) {
                 }
                 pthread_mutex_unlock(&glight_mutex);
                 glight_flag = 0;
-/*************collect data*****************/
+
 
 /************populate the log packet*********/
                 time_t t = time(NULL); struct tm *tm = localtime(&t);
                 strcpy(light_log.time_stamp, asctime(tm));
-                strcpy(light_log.log_msg, "lightTask");
+                strcpy(light_log.log_msg, "Light task");
+
 /************Log messages on Que*************/
                 //  sleep(30);
                 clock_gettime(CLOCK_MONOTONIC,&now);
