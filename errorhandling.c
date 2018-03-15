@@ -1,3 +1,9 @@
+/*******************************************************************************
+   @Filename:errorHandling.c
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -59,8 +65,6 @@ void handle_err(char* arg_msg,mqd_t msgq_err,mqd_t msgq,msg_type type){
         return;
 }
 
-
-//this thread is created for mq_notify event on error message que
 void errorFunction(union sigval sv){
 //read and print the error
         if(sv.sival_ptr == NULL) {printf("errorFunction argument\n"); return;}

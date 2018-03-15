@@ -1,4 +1,9 @@
-
+#*******************************************************************************
+   #Filename:Makefile
+   #Brief:
+   #Author:Ravi Dubey
+   #Date:3/14/2018
+ #*****************************************************************************/
 
 main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o socketTask.o includes.h i2cWrapper.o tmp102Sensor.o adps9301Sensor.o
 	gcc -g -o $@ $^ -lpthread -lrt -lm

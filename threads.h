@@ -1,4 +1,9 @@
-
+/*******************************************************************************
+   @Filename:threads.h
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
 #ifndef THREAH_H
 #define THREAD_H
 
@@ -48,8 +53,6 @@ void *tempTask(void *pthread_inf);
 *@return: returns NULL pointer
 */
 void *logTask(void *pthread_inf);
-
-
 
 /**
 *@brief:Implements socketTask

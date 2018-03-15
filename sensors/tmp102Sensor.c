@@ -1,9 +1,10 @@
-
+/*******************************************************************************
+   @Filename:tmp102Sensor.c
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
 #include "tmp102Sensor.h"
-
-
-// The Pointer Register uses the two least-significant bytes (LSBs) to identify
-// which of the data registers must respond to a read or write command.
 
 void tlowRead(int i2c_file_handler, char *buffer)
 {
@@ -31,8 +32,6 @@ void thighWrite(int i2c_file_handler, char *buffer)
         i2cWrite(i2c_file_handler, buffer, 2);
 }
 
-
-//  byte 1 is MSB,  byte 2LSB. First 12 bits indicate temperature.
 void temperatureRead(int i2c_file_handler, char *buffer)
 {
         char P1P0= TEMP_READ_REG;
@@ -46,7 +45,6 @@ int initializeTemp()
         temp=i2cInit("/dev/i2c-2",temp,TEMP_ADDR);
         return temp;
 }
-
 
 void configRegWrite(int file_handler, char *buffer)
 {

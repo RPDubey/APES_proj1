@@ -1,3 +1,9 @@
+/*******************************************************************************
+   @Filename:tmp102Sensor.h
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -30,21 +36,75 @@ typedef enum{
 	KELVIN
 } temp_unit;
 
-
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 float temperatureConv(temp_unit unit, char *buffer);
 
+/**
+*@brief:
+*byte 1 is MSB,  byte 2LSB. First 12 bits indicate temperature.
+*@param:
+*@return:
+*/
 void temperatureRead(int i2c_file_handler, char *buffer);
 
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 int initializeTemp();
 
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 void configRegWrite(int i2c_file_handler, char *buffer);
 
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 void configRegRead(int i2c_file_handler, char *buffer);
 
+/**
+*@brief:
+*The Pointer Register uses the two least-significant bytes (LSBs) to identify
+*which of the data registers must respond to a read or write command.
+*@param:
+*@return:
+*/
 void tlowRead(int i2c_file_handler, char *buffer);
 
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 void thighRead(int i2c_file_handler, char *buffer);
 
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 void thighWrite(int i2c_file_handler, char *buffer);
 
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
 void tlowWrite(int i2c_file_handler, char *buffer);
