@@ -9,10 +9,19 @@
 
 #include<stdint.h>
 #include"messageQue.h"
-
 #define PORT 8080
+#define DEFAULT_FILE_NAME ("logfile.txt")
+char* filename;
 
 //#define BBB
+
+#ifdef BBB
+
+#define LED_ON (system("echo 1 > /sys/class/leds/beaglebone:green:usr0/brightness"))
+#define LED_OFF (system("echo 0 > /sys/class/leds/beaglebone:green:usr0/brightness"))
+#define LED_CONTROL(status) {if(status == 1) LED_ON; \
+                             if(status == 0) LED_OFF; }
+#endif
 
 typedef enum{
 	CELCIUS,
@@ -22,7 +31,8 @@ typedef enum{
 
 typedef enum{
 init,
-error
+error,
+notification
 }msg_type;
 
 typedef struct{

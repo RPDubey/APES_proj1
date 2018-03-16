@@ -65,10 +65,22 @@ void LogHBhandler(int sig){
 }
 
 
-int main()
+int main(int argc, char* argv[])
 {
+        if(argc>1) {filename = (char*)malloc(sizeof(argv[1]));
+                    strcpy(filename,argv[1]);}
+        else {filename = (char*)malloc(sizeof(DEFAULT_FILE_NAME)); strcpy(filename, DEFAULT_FILE_NAME);}
+        printf("Logfile name set to %s\n",filename);
         int ret;
         msg_pack = (notify_pack*)malloc(sizeof(notify_pack));
+/*****Disabling the Heartbeat on LED 0 to control through application*******/
+#ifdef BBB
+        ret = system("echo none >/sys/class/leds/beaglebone:green:usr0/trigger");
+        if(ret == -1) printf("sytem call error\n");
+        else printf("Heart Beat switched off on LED0\n");
+        LED_CONTROL(0);
+#endif
+
 //pthread_mutex_init
         if(msg_pack == NULL) {perror("malloc-main"); return -1;}
         printf("Entering Main- PID:%d\n",getpid());
@@ -278,7 +290,7 @@ int main()
         mq_unlink(LOGGER_MQ);
         mq_unlink(NOTIFY_MQ);
         free(msg_pack);
-
+        free(filename);
         printf("Destroyed all opened Msg Ques\n");
 
         printf("***************Exiting***************\n");

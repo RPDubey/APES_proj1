@@ -183,7 +183,7 @@ void *lightTask(void *pthread_inf) {
         notify(&init_message[6][0],notify_msgq,logger_msgq,init);
         notify(&init_message[7][0],notify_msgq,logger_msgq,init);
 
-        if(init_state == 0) { notify("##All elements not initialized in Light Task, Not proceeding with it##\n",notify_msgq,logger_msgq,init);
+        if(init_state == 0) { notify("##All elements not initialized in Light Task, Not proceeding with it##\n",notify_msgq,logger_msgq,error);
                               while(gclose_light & gclose_app) {sleep(1);};
                               return NULL;}
 
@@ -234,7 +234,9 @@ void *lightTask(void *pthread_inf) {
                                          sizeof(log_pack),
                                          msg_prio,
                                          &expire);
-                if(num_bytes<0) {notify("mq_send-Log Q-lightTask",notify_msgq,logger_msgq,error);}
+                if(num_bytes<0) {notify("mq_send-Log Q-lightTask",
+                                        notify_msgq,logger_msgq,error);}
+
 /******Log data on IPC Que if requested******/
 
                 if(light_IPC_flag == 1) {
@@ -250,7 +252,6 @@ void *lightTask(void *pthread_inf) {
                                                  IPCmsg_prio,
                                                  &expire);
                         if(num_bytes<0) {notify("mq_send-IPC-lightTask Error",notify_msgq,logger_msgq,error);}
-                        else printf("data put on IPC msg Q\n");
                 }
 
 

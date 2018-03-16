@@ -32,7 +32,7 @@
 void *socketTask(void *pthread_inf) {
 
         uint8_t init_state = 1;
-        char init_message[6][ sizeof(notify_pack) ];
+        char init_message[7][ sizeof(notify_pack) ];
 
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
@@ -109,6 +109,11 @@ void *socketTask(void *pthread_inf) {
         sprintf(&(init_message[4][0]),"SocketTask-bind %s\n",strerror(errno));
         if(ret < 0) init_state =0;
 
+/**listen on socket for connections**/
+        ret = listen(sockfd,5);
+        sprintf(&(init_message[6][0]),"SocketTask-listen %s\n",strerror(errno));
+        if(ret < 0) init_state =0;
+
 
         /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
@@ -131,13 +136,15 @@ void *socketTask(void *pthread_inf) {
         notify(&init_message[3][0],notify_msgq,logger_msgq,init);
         notify(&init_message[4][0],notify_msgq,logger_msgq,init);
         notify(&init_message[5][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[6][0],notify_msgq,logger_msgq,init);
+
 
         if(init_state == 0) { notify("##All elements not initialized in Socket Task, Not proceeding with it##\n",notify_msgq,logger_msgq,init);
                               while(gclose_socket & gclose_app) {sleep(1);};
                               free(request); free(response);
                               return NULL;}
 
-        else if(init_state == 1) notify("##All elements initialized in Socket Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
+        else if(init_state == 1) notify("##All elements initialized in Socket Task, proceeding with it##\n",notify_msgq,logger_msgq,error);
 
 #ifdef BBB
         int temp_handle = initializeTemp();//Get the Handler
@@ -154,10 +161,6 @@ void *socketTask(void *pthread_inf) {
 
 #endif
 
-
-/**listen on socket for connections**/
-        ret = listen(sockfd,5);
-        if(ret < 0) printf("SocketTask-listen %s\n",strerror(errno));
 
 /****block until the client connects to the server and gets its address*****/
         struct sockaddr_in client_addr;
@@ -192,7 +195,10 @@ void *socketTask(void *pthread_inf) {
                 bzero(request,sizeof(sock_req));
 
                 num_char = read(newsockfd,(char*)request,sizeof(sock_req));
-                if(num_char<0) {printf("read Error:%s\n",strerror(errno)); break;}
+                if(num_char<0) {
+                        notify("Socket Task read error",notify_msgq,logger_msgq,error);
+                        break;
+                }
 
 //find the sensor requested to to probe and probe the sensor
                 time_t t = time(NULL); struct tm *tm = localtime(&t);        strcpy(response->time_stamp, asctime(tm));
@@ -219,10 +225,12 @@ void *socketTask(void *pthread_inf) {
 #endif
 //send the read data
                 num_char = write(newsockfd,response,sizeof(log_pack));
-                if(num_char<0) {printf("write Error:%s\n",strerror(errno)); break;}
-                //if(num_char>0) printf("Message sent to client\n");
+                if(num_char<0) {
+                        notify("Socket Task write error",notify_msgq,logger_msgq,error);
+                        break;
+                }
 
-                sleep(2);
+//                sleep(2);
 
 
         }

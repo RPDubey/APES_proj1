@@ -185,7 +185,7 @@ void *tempTask(void *pthread_inf) {
                               while(gclose_temp & gclose_app) {sleep(1);};
                               return NULL;}
 
-        else if(init_state == 1) notify("##All elements initialized in Temp Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
+        else if(init_state == 1) notify("##All elements initialized in Temp Task, proceeding with it##\n",notify_msgq,logger_msgq,error);
 
 /************Creating logpacket*******************/
         log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
@@ -244,8 +244,8 @@ void *tempTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {notify("mq_send-IPC Q-tempTask Error",notify_msgq,logger_msgq,error);}
-                        else printf("data put on IPC msg Q\n");
+                        if(num_bytes<0) {notify("mq_send-IPC Q-tempTask Error",
+                                                notify_msgq,logger_msgq,error);}
                 }
                 //printf("hi\n");
                 //  notify("Test Error",notify_msgq,logger_msgq,error);

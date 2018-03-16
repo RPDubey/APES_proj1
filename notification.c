@@ -79,11 +79,13 @@ void notifyRcvThread(union sigval sv){
         expire.tv_sec = now.tv_sec+2;
         expire.tv_nsec = now.tv_nsec;
         int num_bytes;
-
+        int error_flag = 0;
         int ret =  pthread_mutex_lock(&error_msg_lock);
         if(ret !=0 ) {perror("notifyRcvThread-mutexlock"); return;}
 //empty the logger_msgq - notification only for an empty q
         do {
+                bzero(msg_pack,sizeof(msg_pack));
+
                 num_bytes = mq_timedreceive(notify_msgq,
                                             (char*)msg_pack,
                                             sizeof(notify_pack),
@@ -91,8 +93,7 @@ void notifyRcvThread(union sigval sv){
                                             &expire);
                 if(num_bytes>0) {
                         printf("%s",( (notify_pack*)msg_pack)->msg);
-                        bzero(msg_pack,sizeof(msg_pack));
-
+                        if( ((notify_pack*)msg_pack)->type == error) error_flag =1;
                 }
 
         } while(num_bytes>0);
@@ -102,8 +103,11 @@ void notifyRcvThread(union sigval sv){
 //reregister for notification
         ret  = mq_notify(notify_msgq,&sig_ev_err);
         if(ret == -1) {perror("mq_notify-notifyRcvThread"); return;}
-//what are we supposed to do if initializatio complete
-//change led status???????????????????????????
-//left to do based on err_pack type
+
+//For error condition turn on the LED
+#ifdef BBB
+        if(error_flag == 1) LED_CONTROL(1);
+#endif
+
         return;
 }

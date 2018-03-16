@@ -22,6 +22,7 @@
 sig_atomic_t log_data_flag;
 
 void *logTask(void *pthread_inf) {
+
         int ret;
         uint8_t init_state = 1;
         char init_message[4][ sizeof(notify_pack) ];
@@ -77,7 +78,7 @@ void *logTask(void *pthread_inf) {
         }
 
 //open a file to write to
-        FILE* pfd = fopen("logfile.txt","w");
+        FILE* pfd = fopen(filename,"w");
         if(pfd==NULL) {
                 init_state =0;
                 sprintf(&(init_message[3][0]),"Log Task-fopen %s\n",strerror(errno));
@@ -145,7 +146,7 @@ void *logTask(void *pthread_inf) {
                               while(gclose_log & gclose_app) {sleep(1);};
                               return NULL;}
 
-        else if(init_state == 1) notify("##All elements initialized in Log Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
+        else if(init_state == 1) notify("##All elements initialized in Log Task, proceeding with it##\n",notify_msgq,logger_msgq,error);
 
 
 /*******************Do this in LOOP************************************/
@@ -169,8 +170,10 @@ void *logTask(void *pthread_inf) {
                         //write to a log file
                         if(num_bytes>0) {
                                 fprintf(pfd,"%s  %d  %d  %s\n\n",
-                                        ((log_pack*)log)->time_stamp,((log_pack*)log)->log_level,
-                                        ((log_pack*)log)->log_source,((log_pack*)log)->log_msg );
+                                        ((log_pack*)log)->time_stamp,
+                                        ((log_pack*)log)->log_level,
+                                        ((log_pack*)log)->log_source,
+                                        ((log_pack*)log)->log_msg );
                                 fflush(pfd);
                         }
                 } while(num_bytes>0);
