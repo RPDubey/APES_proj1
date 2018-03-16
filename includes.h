@@ -10,7 +10,15 @@
 #include<stdint.h>
 #include"messageQue.h"
 
-#define PORT 8080
+#define PORT 100
+
+//#define BBB
+
+typedef enum{
+	CELCIUS,
+	FARENHEIT,
+	KELVIN
+} temp_unit;
 
 typedef enum{
 init,
@@ -20,7 +28,7 @@ error
 typedef struct{
 char msg[BUF_SIZE-sizeof(msg_type)];
 msg_type type;
-}err_msg_pack;
+}notify_pack;
 
 typedef enum {
   temperatue_Task,
@@ -42,9 +50,11 @@ typedef enum{
 temp,
 light
 }sensor_type;
+
 //request structure
   typedef struct {
   sensor_type sensor;
+  temp_unit unit;//if sensor is temperature
   }sock_req;
 
 #endif

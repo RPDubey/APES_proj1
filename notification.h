@@ -1,5 +1,5 @@
 /*******************************************************************************
-   @Filename:errorHandling.h
+   @Filename:notification.h
    @Brief:
    @Author:Ravi Dubey
    @Date:3/14/2018
@@ -9,7 +9,7 @@
 
 #include"includes.h"
 
-err_msg_pack *msg_pack;
+notify_pack *msg_pack;
 
 struct sigevent sig_ev_err;
 
@@ -19,7 +19,7 @@ struct sigevent sig_ev_err;
 *@param:
 *@return:
 */
-void errorFunction(union sigval sv);
+void notifyRcvThread(union sigval sv);
 
 /**
 *@brief:
@@ -27,6 +27,6 @@ void errorFunction(union sigval sv);
 *@param:
 *@return:
 */
-void handle_err(char* msg,mqd_t msgq_err,mqd_t msgq_log,msg_type type);
+void notify(char* msg,mqd_t notify_msgq,mqd_t msgq_log,msg_type type);
 
 #endif

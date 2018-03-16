@@ -5,7 +5,7 @@
    #Date:3/14/2018
  #*****************************************************************************/
 
-main.elf:main.c lightTask.o tempTask.o signals.o logTask.o errorhandling.o socketTask.o includes.h i2cWrapper.o tmp102Sensor.o adps9301Sensor.o
+main.elf:main.c lightTask.o tempTask.o signals.o logTask.o notification.o socketTask.o includes.h i2cWrapper.o tmp102Sensor.o adps9301Sensor.o
 	gcc -g -o $@ $^ -lpthread -lrt -lm
 
 signals.o:signals.c
@@ -20,7 +20,7 @@ lightTask.o:lightTask.c messageQue.h includes.h
 tempTask.o:tempTask.c messageQue.h includes.h
 	gcc -c -o $@ $<  -lpthread -lrt
 
-errorhandling.o:errorhandling.c messageQue.h includes.h
+notification.o:notification.c messageQue.h includes.h
 	gcc -c -o $@ $<  -lpthread -lrt
 
 socketTask.o:socketTask.c includes.h

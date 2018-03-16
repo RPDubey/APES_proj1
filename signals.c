@@ -54,7 +54,7 @@ int setTempTimer(){
         };
 //        sig_act.sa_mask = mask;
         ret = sigaction(SIGTEMP,&sig_act,NULL);
-        if(ret == -1) { perror("sigaction setTempTimer"); return -1; }
+        if(ret == -1) return -1;
 /***********************Creating the timer*********************/
 
         /*sigevent struct specifies how the caller should be notified on timer expiry*/
@@ -69,7 +69,7 @@ int setTempTimer(){
                            &sig_ev,      //signal notification on timer expiry
                            &timerid      //function places the id of the timer here
                            );
-        if(ret == -1) { perror("timer_create setTempTimer"); return -1; }
+        if(ret == -1) return -1;
 
 /******************* start the timer*******************/
         struct itimerspec its={
@@ -83,7 +83,7 @@ int setTempTimer(){
                             &its,       //timer specs
                             NULL        //if non null, old timer specs returned here
                             );
-        if(ret == -1)  { perror("timer_settime setTempTimer"); return -1; }
+        if(ret == -1) return -1;
 
         return 1;
 }
@@ -100,7 +100,7 @@ int setLightTimer(){
         };
         //  sig_act.sa_mask=mask;
         ret = sigaction(SIGLIGHT,&sig_act,NULL);
-        if(ret == -1) { perror("sigaction setLightTimer"); return -1; }
+        if(ret == -1) return -1;
 
 /***********************Creating the timer*********************/
 
@@ -116,7 +116,7 @@ int setLightTimer(){
                            &sig_ev, //signal notification on timer expiry
                            &timerid //function places the id of the timer here
                            );
-        if(ret == -1) { perror("timer_create setLightTimer"); return -1; }
+        if(ret == -1) return -1;
 
 /******************* start the timer*******************/
         struct itimerspec its={
@@ -130,6 +130,6 @@ int setLightTimer(){
                             &its, //timer specs
                             NULL //if non null, old timer specs returned here
                             );
-        if(ret == -1)  { perror("timer_settime setLightTimer"); return -1; }
+        if(ret == -1) return -1;
         return 1;
 }

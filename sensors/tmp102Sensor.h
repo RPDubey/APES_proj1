@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include "i2cWrappper.h"
+#include "../includes.h"
 
 #define TEMP_ADDR 			(0x48)
 #define TEMP_READ_REG 	(0x00)
@@ -30,11 +31,6 @@
 #define TEMP_CONFIG_VAL (0x60)
 
 
-typedef enum{
-	CELCIUS,
-	FARENHEIT,
-	KELVIN
-} temp_unit;
 
 /**
 *@brief:

@@ -16,7 +16,7 @@
 #include "messageQue.h"
 #include <mqueue.h>
 #include "includes.h"
-#include "errorhandling.h"
+#include "notification.h"
 #include "./sensors/tmp102Sensor.h"
 
 sig_atomic_t temp_IPC_flag;
@@ -29,8 +29,8 @@ void TemptIPChandler(int sig){
 
 void *tempTask(void *pthread_inf) {
 
-        uint8_t init_state = 0;
-        char init_message[6][ sizeof(err_msg_pack) ];
+        uint8_t init_state = 1;
+        char init_message[8][ sizeof(notify_pack) ];
         temp_IPC_flag = 0;
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
@@ -38,47 +38,48 @@ void *tempTask(void *pthread_inf) {
 
 
 /*******Initialize ERROR Message Que*****************/
-        mqd_t msgq_err;
+        mqd_t notify_msgq;
         int msg_prio_err = MSG_PRIO_ERR;
         int num_bytes_err;
         struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
                                         .mq_msgsize = BUF_SIZE,//max size of msg in bytes
                                         .mq_flags = 0};
 
-        msgq_err = mq_open(MY_MQ_ERR, //name
-                           O_CREAT | O_RDWR,//flags. create a new if dosent already exist
-                           S_IRWXU, //mode-read,write and execute permission
-                           &msgq_attr_err); //attribute
-        // if(msgq_err < 0) {perror("mq_open-error_mq-tempTask "); return NULL;}
-// else printf("Messgae Que Opened in tempTask\n");
+        notify_msgq = mq_open(NOTIFY_MQ, //name
+                              O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                              S_IRWXU, //mode-read,write and execute permission
+                              &msgq_attr_err); //attribute
 
-        if(msgq_err < 0) {
+        if(notify_msgq < 0) {
                 init_state =0;
-                sprintf(&(init_message[0][0]),"mq_open-error_mq-tempTask %s\n",strerror(errno));
+                sprintf(&(init_message[0][0]),"Temp Task mq_open-notify_mq  %s\n",strerror(errno));
         }
         else {
-                init_state =0;
-                sprintf(&(init_message[0][0]),"MessgaeQ Opened in tempTask:%s\n",strerror(errno));
+                sprintf(&(init_message[0][0]),"Temp Task mq_open-notify_mq %s\n",strerror(errno));
         }
 
 
 
 /******set periodic timer**************/
         ret = setTempTimer(); //sets up timer to periodically signal and wake this thread
-        if(ret ==-1) return NULL;
-        else printf("Periodic Timer set for Temperature Task\n");
+        if(ret == -1) {
+                init_state =0;
+                sprintf(&(init_message[1][0]),"Temptask-setTempTimer Error\n");
+        }
+        else {
+                sprintf(&(init_message[1][0]),"Temptask-setTempTimer Success\n");
+        }
 
         ret = pthread_mutex_init(&gtemp_mutex,NULL);
         if(ret == -1) {
                 init_state =0;
-                sprintf(&(init_message[1][0]),"temptask-pthread_mutex_init %s\n",strerror(errno));
+                sprintf(&(init_message[2][0]),"Temptask-pthread_mutex_init %s\n",strerror(errno));
         }
         else {
-                init_state =0;
-                sprintf(&(init_message[1][0]),"temptaskpthread_mutex_init:%s\n",strerror(errno));
+                sprintf(&(init_message[2][0]),"Temptask-pthread_mutex_init:%s\n",strerror(errno));
         }
 /*******Initialize Logger Message Que*****************/
-        mqd_t msgq;
+        mqd_t logger_msgq;
         int msg_prio = 30;
         int num_bytes;
         char message[BUF_SIZE];
@@ -86,20 +87,19 @@ void *tempTask(void *pthread_inf) {
                                     .mq_msgsize = BUF_SIZE,//max size of msg in bytes
                                     .mq_flags = 0};
 
-        msgq = mq_open(MY_MQ, //name
-                       O_CREAT | O_RDWR,//flags. create a new if dosent already exist
-                       S_IRWXU, //mode-read,write and execute permission
-                       &msgq_attr); //attribute
+        logger_msgq = mq_open(LOGGER_MQ, //name
+                              O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                              S_IRWXU, //mode-read,write and execute permission
+                              &msgq_attr); //attribute
 
-        if(msgq < 0) {
+        if(logger_msgq < 0) {
                 init_state =0;
-                sprintf(&(init_message[2][0]),"temptask-mq_open-loggerQ %s\n",strerror(errno));
+                sprintf(&(init_message[3][0]),"Temp Task-mq_open-loggerQ %s\n",strerror(errno));
         }
         else {
-                init_state =0;
-                sprintf(&(init_message[2][0]),"temptask-mq_open-loggerQ %s\n",strerror(errno));
+                sprintf(&(init_message[3][0]),"Temp Task-mq_open-loggerQ %s\n",strerror(errno));
         }
-/***************setting msgq for IPC data Request******************/
+/***************setting logger_msgq for IPC data Request******************/
         mqd_t IPCmsgq;
         int IPCmsg_prio = 20;
         int IPCnum_bytes;
@@ -115,11 +115,10 @@ void *tempTask(void *pthread_inf) {
                           &IPCmsgq_attr); //attribute
         if(IPCmsgq < 0) {
                 init_state =0;
-                sprintf(&(init_message[3][0]),"temptask-mq_open-IPCQ %s\n",strerror(errno));
+                sprintf(&(init_message[4][0]),"Temptask-mq_open-IPCQ %s\n",strerror(errno));
         }
         else {
-                init_state =1;
-                sprintf(&(init_message[3][0]),"temptask-mq_open-IPCQ %s\n",strerror(errno));
+                sprintf(&(init_message[4][0]),"Temptask-mq_open-IPCQ %s\n",strerror(errno));
         }
 //set up the signal to request data
         struct sigaction action;
@@ -129,26 +128,27 @@ void *tempTask(void *pthread_inf) {
 
         if(ret  == -1) {
                 init_state =0;
-                sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
+                sprintf(&(init_message[5][0]),"Temp Task sigaction %s\n",strerror(errno));
         }
         else {
-                init_state =1;
-                sprintf(&(init_message[4][0]),"sigaction temptask %s\n",strerror(errno));
+                sprintf(&(init_message[5][0]),"Temp task sigaction %s\n",strerror(errno));
         }
+
+/************Initialize temperatue sensor******************/
+#ifdef BBB
         int temp = initializeTemp();
         char temp_data[2], data_cel_str[BUF_SIZE-200];
         float data_cel;
 
         if(temp  == -1) {
                 init_state =0;
-                sprintf(&(init_message[5][0]),"i2c init fail\n");
+                sprintf(&(init_message[6][0]),"Temp Sensor init Error\n");
         }
         else {
-                init_state =1;
-                sprintf(&(init_message[5][0]),"i2c init success\n");
+                sprintf(&(init_message[6][0]),"Temp Sensor init Success\n");
         }
+#endif
 
-        sleep(2);//let other threads initialize
 /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask);
@@ -160,15 +160,31 @@ void *tempTask(void *pthread_inf) {
                 SIG_SETMASK, //block the signals in the set argument
                 &mask, //set argument has list of blocked signals
                 NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+        if(ret  == -1) {
+                init_state =0;
+                sprintf(&(init_message[7][0]),"Temp task-pthread_sigmask %s\n",strerror(errno));
+        }
+        else {
+                sprintf(&(init_message[7][0]),"Temp task-pthread_sigmask %s\n",strerror(errno));
+        }
 
 //send initialization status
-        handle_err(&init_message[0][0],msgq_err,msgq,init);
-        handle_err(&init_message[1][0],msgq_err,msgq,init);
-        handle_err(&init_message[2][0],msgq_err,msgq,init);
-        handle_err(&init_message[3][0],msgq_err,msgq,init);
-        handle_err(&init_message[4][0],msgq_err,msgq,init);
-        handle_err(&init_message[5][0],msgq_err,msgq,init);
+        notify(&init_message[0][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[1][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[2][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[3][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[4][0],notify_msgq,logger_msgq,init);
+#ifdef BBB
+        notify(&init_message[5][0],notify_msgq,logger_msgq,init);
+#endif
+        notify(&init_message[6][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[7][0],notify_msgq,logger_msgq,init);
+
+        if(init_state == 0) { notify("##All elements not initialized in Temp Task, Not proceeding with it##\n",notify_msgq,logger_msgq,init);
+                              while(gclose_temp & gclose_app) {sleep(1);};
+                              return NULL;}
+
+        else if(init_state == 1) notify("##All elements initialized in Temp Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
 
 /************Creating logpacket*******************/
         log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
@@ -188,16 +204,19 @@ void *tempTask(void *pthread_inf) {
 //send HB
                 pthread_kill(ppthread_info->main,SIGTEMP_HB);
 //collect temperatue
+#ifdef BBB
                 temperatureRead(temp,temp_data);
                 data_cel = temperatureConv(CELCIUS,temp_data);
 
 /************populate the log packet*********/
-
-                time_t t = time(NULL); struct tm *tm = localtime(&t);
-                strcpy(temp_log.time_stamp, asctime(tm));
-
                 sprintf(data_cel_str,"temperature %f", data_cel);
                 strcpy(temp_log.log_msg, data_cel_str);
+#else
+                strcpy(temp_log.log_msg, "Mock temp");
+
+#endif
+                time_t t = time(NULL); struct tm *tm = localtime(&t);
+                strcpy(temp_log.time_stamp, asctime(tm));
 
 /*******Log messages on Que*************/
 //set up time for timed send
@@ -205,12 +224,12 @@ void *tempTask(void *pthread_inf) {
                 clock_gettime(CLOCK_MONOTONIC,&now);
                 expire.tv_sec = now.tv_sec+2;
                 expire.tv_nsec = now.tv_nsec;
-                num_bytes = mq_timedsend(msgq,
+                num_bytes = mq_timedsend(logger_msgq,
                                          (const char*)&temp_log,
                                          sizeof(log_pack),
                                          msg_prio,
                                          &expire);
-                if(num_bytes<0) {handle_err("mq_send to Log Q in tempTask", msgq_err,msgq,error);}
+                if(num_bytes<0) {notify("mq_send to Log Q in tempTask", notify_msgq,logger_msgq,error);}
 /******Log data on IPC Que if requested******/
 
                 if(temp_IPC_flag == 1) {
@@ -224,17 +243,17 @@ void *tempTask(void *pthread_inf) {
                                                  sizeof(log_pack),
                                                  IPCmsg_prio,
                                                  &expire);
-                        if(num_bytes<0) {handle_err("mq_send-IPC Q-tempTask Error",msgq_err,msgq,error);}
+                        if(num_bytes<0) {notify("mq_send-IPC Q-tempTask Error",notify_msgq,logger_msgq,error);}
                         else printf("data put on IPC msg Q\n");
                 }
                 //printf("hi\n");
-                //  handle_err("Test Error",msgq_err,msgq,error);
+                //  notify("Test Error",notify_msgq,logger_msgq,error);
 
 
         }
         printf("exiting Temp task\n");
-        mq_close(msgq);
-        mq_close(msgq_err);
+        mq_close(logger_msgq);
+        mq_close(notify_msgq);
         mq_close(IPCmsgq);
 
         return NULL;

@@ -24,11 +24,49 @@
 #include "messageQue.h"
 #include <mqueue.h>
 #include "includes.h"
-#include "errorhandling.h"
+#include "notification.h"
+#include "./sensors/tmp102Sensor.h"
+#include "./sensors/adps9301Sensor.h"
+
 
 void *socketTask(void *pthread_inf) {
+
+        uint8_t init_state = 1;
+        char init_message[6][ sizeof(notify_pack) ];
+
         int ret;
         threadInfo *ppthread_info = (threadInfo *)pthread_inf;
+/*******Initialize Notification  Message Que*****************/
+        mqd_t notify_msgq;
+        int msg_prio_err = MSG_PRIO_ERR;
+        int num_bytes_err;
+        struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                        .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                        .mq_flags = 0};
+
+        notify_msgq = mq_open(NOTIFY_MQ, //name
+                              O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                              S_IRWXU, //mode-read,write and execute permission
+                              &msgq_attr_err); //attribute
+        sprintf(&(init_message[0][0]),"SocketTask-mq_open-notify mq %s\n",strerror(errno));
+        if(ret < 0) init_state =0;
+
+/*******Initialize Logger Message Que*****************/
+        mqd_t logger_msgq;
+        int msg_prio = MSG_PRIO;
+        int num_bytes;
+        char message[BUF_SIZE];
+        struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, //max # msg in queue
+                                    .mq_msgsize = BUF_SIZE,//max size of msg in bytes
+                                    .mq_flags = 0};
+
+        logger_msgq = mq_open(LOGGER_MQ, //name
+                              O_CREAT | O_RDWR,//flags. create a new if dosent already exist
+                              S_IRWXU, //mode-read,write and execute permission
+                              &msgq_attr); //attribute
+        sprintf(&(init_message[1][0]),"SocketTask-mq_open-logger mq %s\n",strerror(errno));
+        if(ret < 0) init_state =0;
+
 
 /*************Sockets*****************************/
 //user defined data structures for data read and write
@@ -49,7 +87,8 @@ void *socketTask(void *pthread_inf) {
                 AF_INET,         // com domain - IPv4
                 SOCK_STREAM,         //com type - TCP
                 0);         //protocol
-        if(sockfd < 0) {printf("fork Error:%s\n",strerror(errno)); return NULL;}
+        sprintf(&(init_message[2][0]),"SocketTask-socket %s\n",strerror(errno));
+        if(sockfd < 0) init_state =0;
 
 /*****set options for the socket***********/
         ret = setsockopt(sockfd,
@@ -57,8 +96,8 @@ void *socketTask(void *pthread_inf) {
                          SO_REUSEADDR|SO_REUSEPORT,
                          &opt,         //option is enabled
                          sizeof(opt) );
-
-        if(ret==-1) {printf("setsockopt Error:%s\n",strerror(errno)); return NULL;}
+        sprintf(&(init_message[3][0]),"SocketTask-setsockopt %s\n",strerror(errno));
+        if(ret < 0) init_state =0;
 /***initialize the address structure and bind socket ****/
         bzero((char*)&server_addr, sizeof(server_addr));         //sets all val to 0
         server_addr.sin_family=AF_INET;
@@ -67,18 +106,11 @@ void *socketTask(void *pthread_inf) {
         ret = bind(sockfd,
                    (struct sockaddr*)&server_addr,
                    sizeof(server_addr));
-        if(ret == -1) {printf("bind Error:%s\n",strerror(errno)); return NULL;}
+        sprintf(&(init_message[4][0]),"SocketTask-bind %s\n",strerror(errno));
+        if(ret < 0) init_state =0;
 
-/**listen on socket for connections**/
-        ret = listen(sockfd,5);
-        if(ret == -1) {printf("listen Error:%s\n",strerror(errno)); return NULL;}
 
-/****block until the client connects to the server and gets its address*****/
-        struct sockaddr_in client_addr;
-        socklen_t addrlen = sizeof(client_addr);         //size of address of client
-
-        sleep(1);//allow other threads to initialize
-/*****************Mask SIGNALS********************/
+        /*****************Mask SIGNALS********************/
         sigset_t mask; //set of signals
         sigemptyset(&mask);
         sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
@@ -90,8 +122,46 @@ void *socketTask(void *pthread_inf) {
                 SIG_SETMASK, //block the signals in the set argument
                 &mask, //set argument has list of blocked signals
                 NULL); //if non NULL prev val of signal mask stored here
-        if(ret == -1) { printf("Error:%s\n",strerror(errno)); return NULL; }
+        sprintf(&(init_message[5][0]),"SocketTask-pthread_sigmask %s\n",strerror(errno));
+        if(ret < 0) init_state =0;
 
+        notify(&init_message[0][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[1][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[2][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[3][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[4][0],notify_msgq,logger_msgq,init);
+        notify(&init_message[5][0],notify_msgq,logger_msgq,init);
+
+        if(init_state == 0) { notify("##All elements not initialized in Socket Task, Not proceeding with it##\n",notify_msgq,logger_msgq,init);
+                              while(gclose_socket & gclose_app) {sleep(1);};
+                              free(request); free(response);
+                              return NULL;}
+
+        else if(init_state == 1) notify("##All elements initialized in Socket Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
+
+#ifdef BBB
+        int temp_handle = initializeTemp();//Get the Handler
+        char temp_data[2], data_cel_str[BUF_SIZE-200];
+        float data_cel;
+
+        int light_handle = initializeLight();//Get the handler
+        char lightbuffer[1];
+        commandReg(light_handle,CONTROL,WRITE);
+        controlReg(light_handle,WRITE,ENABLE,lightbuffer);
+        float lumen;
+        char data_lumen_str[BUF_SIZE-200];
+        uint16_t ch0,ch1;
+
+#endif
+
+
+/**listen on socket for connections**/
+        ret = listen(sockfd,5);
+        if(ret < 0) printf("SocketTask-listen %s\n",strerror(errno));
+
+/****block until the client connects to the server and gets its address*****/
+        struct sockaddr_in client_addr;
+        socklen_t addrlen = sizeof(client_addr);         //size of address of client
 
 
 //keep doing this repeatedly
@@ -113,19 +183,38 @@ void *socketTask(void *pthread_inf) {
 
                 num_char = read(newsockfd,(char*)request,sizeof(sock_req));
                 if(num_char<0) {printf("read Error:%s\n",strerror(errno)); break;}
-//                if(num_char>0) printf("read request:%d\n",request->sensor);
 
 //find the sensor requested to to probe and probe the sensor
                 time_t t = time(NULL); struct tm *tm = localtime(&t);        strcpy(response->time_stamp, asctime(tm));
-//collect data and plugin
-                if(request->sensor==(sensor_type)temp) strcpy(response->log_msg, "TEMP");
-                if(request->sensor==(sensor_type)light) strcpy(response->log_msg, "LIGHT");
 
+//collect data and populate the log packet
+#ifdef BBB
+                if(request->sensor==temp) {
+                        temperatureRead(temp_handle,temp_data);
+                        data_cel = temperatureConv(CELCIUS,temp_data);
+                        sprintf(data_cel_str,"temperature %f", data_cel);
+                        strcpy(response->log_msg, data_cel_str);
+                }
+                if(request->sensor==light) {
+                        ch0=adcDataRead(light,0);
+                        ch1=adcDataRead(light,1);
+                        lumen = reportLumen(ch0, ch1);
+                        sprintf(data_lumen_str,"lumen %f", lumen);
+                        strcpy(response->log_msg, data_lumen_str);
+                }
+
+#else
+                if(request->sensor==temp) { strcpy(response->log_msg, "TEMP");}
+                if(request->sensor==light) {strcpy(response->log_msg, "LIGHT");}
+#endif
 //send the read data
                 num_char = write(newsockfd,response,sizeof(log_pack));
                 if(num_char<0) {printf("write Error:%s\n",strerror(errno)); break;}
                 if(num_char>0) printf("Message sent to client\n");
+
                 sleep(2);
+
+
         }
         printf("Exiting Socket Task\n");
         free(request);
