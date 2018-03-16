@@ -31,6 +31,14 @@
 sig_atomic_t glight_HB_flag;
 sig_atomic_t gtemp_HB_flag;
 sig_atomic_t glog_HB_flag;
+sig_atomic_t gsocket_HB_flag;
+
+void SocketHBhandler(int sig){
+        if(sig == SIGSOCKET_HB)
+        {
+                gsocket_HB_flag = 1;
+        }
+}
 
 void LightHBhandler(int sig){
         if(sig == SIGLIGHT_HB)
@@ -64,9 +72,10 @@ int main()
 //pthread_mutex_init
         if(msg_pack == NULL) {perror("malloc-main"); return -1;}
         printf("Entering Main- PID:%d\n",getpid());
-        gclose_app = 1; gclose_light = 1; gclose_temp = 1; gclose_log = 1;
-        gclose_socket = 1; gtemp_HB_flag = 0; glight_HB_flag = 0;
-
+        gclose_app = 1; gclose_light = 1; gclose_temp = 1;
+        gclose_log = 1; gclose_socket = 1;
+        gtemp_HB_flag = 0; glight_HB_flag = 0;
+        glog_HB_flag = 0; gsocket_HB_flag = 0;
 /*******************Masking SIgnals***********************/
 
 //this thread will be inherited by all
@@ -123,6 +132,13 @@ int main()
         action.sa_flags = 0;
         action.sa_handler = LogHBhandler;
         ret = sigaction(SIGLOG_HB,&action,NULL);
+        if(ret == -1) { perror("Main sigaction"); return -1; }
+
+//Register Socket HB signal
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = 0;
+        action.sa_handler = SocketHBhandler;
+        ret = sigaction(SIGSOCKET_HB,&action,NULL);
         if(ret == -1) { perror("Main sigaction"); return -1; }
 
         //create task threads
@@ -183,6 +199,7 @@ int main()
 
 //check HB signals every 5 seconds
                 SLEEP(5);
+                //  pthread_kill(socket,SIGCONT);//wake the socket to get its HB
 
                 printf("M");
 
@@ -198,7 +215,11 @@ int main()
 
                 if(log_cancelled == 0) {
                         if(glog_HB_flag == 0) printf("NO HB from Log Task\n");
-                        else {printf("l*"); glog_HB_flag = 0;}
+                        else {printf("l"); glog_HB_flag = 0;}
+                }
+                if(socket_cancelled == 0) {
+                        if(gsocket_HB_flag == 0) printf("NO HB from Socket Task\n");
+                        else {printf("S*"); gsocket_HB_flag = 0;}
                 }
                 fflush(stdout);
 

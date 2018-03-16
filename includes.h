@@ -10,7 +10,7 @@
 #include<stdint.h>
 #include"messageQue.h"
 
-#define PORT 100
+#define PORT 8080
 
 //#define BBB
 

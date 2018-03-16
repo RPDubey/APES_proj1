@@ -19,6 +19,8 @@
 
 #define SIGLOG (SIGRTMAX-7)
 
+#define SIGSOCKET_HB  (SIGRTMAX-8)
+
 
 sig_atomic_t gclose_light;
 sig_atomic_t gclose_log;

@@ -156,6 +156,7 @@ void *lightTask(void *pthread_inf) {
         sigaddset(&mask,SIGTEMP); sigaddset(&mask,SIGTEMP_HB);
         sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGLIGHT_HB);
         sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGCONT);
+        sigaddset(&mask,SIGSOCKET_HB);
 
 //unblocking for test
 //sigaddset(&mask,SIGTEMP_IPC); sigaddset(&mask,SIGLIGHT_IPC);

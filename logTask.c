@@ -93,6 +93,7 @@ void *logTask(void *pthread_inf) {
         sigaddset(&mask,SIGLIGHT); sigaddset(&mask,SIGLIGHT_HB);
         sigaddset(&mask,SIGLOG_HB); sigaddset(&mask,SIGTEMP_HB);
         sigaddset(&mask,SIGLOG); sigaddset(&mask,SIGCONT);
+        sigaddset(&mask,SIGSOCKET_HB);
 
         ret = pthread_sigmask(
                 SIG_SETMASK, //block the signals in the set argument

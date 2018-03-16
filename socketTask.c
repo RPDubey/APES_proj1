@@ -85,7 +85,7 @@ void *socketTask(void *pthread_inf) {
 /****Create a new socket*******/
         sockfd = socket(
                 AF_INET,         // com domain - IPv4
-                SOCK_STREAM,         //com type - TCP
+                SOCK_STREAM | SOCK_NONBLOCK,          //com type - TCP
                 0);         //protocol
         sprintf(&(init_message[2][0]),"SocketTask-socket %s\n",strerror(errno));
         if(sockfd < 0) init_state =0;
@@ -166,11 +166,21 @@ void *socketTask(void *pthread_inf) {
 
 //keep doing this repeatedly
         while(gclose_socket & gclose_app) {
+                pthread_kill(ppthread_info->main,SIGSOCKET_HB);//send HB
 
-                newsockfd = accept(sockfd,
-                                   (struct sockaddr*)&client_addr,
-                                   (socklen_t*)&addrlen);
-                if(newsockfd<0) {printf("accept Error:%s\n",strerror(errno)); return NULL;}
+                while(1) {
+                        if((gclose_socket & gclose_app)==0) break;
+
+                        newsockfd = accept(sockfd,
+                                           (struct sockaddr*)&client_addr,
+                                           (socklen_t*)&addrlen);
+                        if( (newsockfd>0) ) break;
+                        else sleep(1);
+//send HB to main
+                        pthread_kill(ppthread_info->main,SIGSOCKET_HB);//send HB
+
+                }
+                if((gclose_socket & gclose_app)==0) break;
 
 /*****beyond this, execution happens only after client is connected******/
 //prepopulate static elements of response packet
@@ -210,7 +220,7 @@ void *socketTask(void *pthread_inf) {
 //send the read data
                 num_char = write(newsockfd,response,sizeof(log_pack));
                 if(num_char<0) {printf("write Error:%s\n",strerror(errno)); break;}
-                if(num_char>0) printf("Message sent to client\n");
+                //if(num_char>0) printf("Message sent to client\n");
 
                 sleep(2);
 
