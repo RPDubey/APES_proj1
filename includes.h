@@ -14,7 +14,8 @@
 char* filename;
 
 
-//#define BBB
+#define BBB
+//#define TEST
 
 #ifdef BBB
 
@@ -66,7 +67,6 @@ char time_stamp[32];
 task_type log_source;
 char log_msg[BUF_SIZE -100];
 uint8_t log_level;
-
 }log_pack;
 
 typedef enum{

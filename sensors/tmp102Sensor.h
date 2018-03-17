@@ -31,6 +31,24 @@
 #define TEMP_CONFIG_VAL (0x60)
 
 
+#define SHUTDOWN_EN 	0x01
+#define SHUTDOWN_DI	0x00
+#define RES_9BIT	0x00
+#define RES_10BIT	0x20
+#define	RES_11BIT	0x40
+#define RES_12BIT	0x60
+#define FAULT1		0x00
+#define FAULT2		0x08
+#define FAULT4		0x10
+#define FAULT6		0x18
+
+//2nd byte
+#define EMMODE		0x10
+#define CONVRATE0	0x00
+#define CONVRATE1	0x40
+#define CONVRATE2	0x80
+#define CONVRATE3	0xC0
+
 
 /**
 *@brief:

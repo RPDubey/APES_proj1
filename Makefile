@@ -36,4 +36,5 @@ i2cWrapper.o:./sensors/i2cWrapper.c
 	gcc -c -o $@ $<
 
 clean:
-	rm -f *.o *.elf logfile.txt ./sensors/*.o
+	rm -f *.o *.elf logfile.txt ./sensors/*.o ./socket_client/*.o ./cmocka/*.o
+	rm -f ./socket_client/*.elf ./cmocka/tests

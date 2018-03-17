@@ -6,6 +6,7 @@
  ******************************************************************************/
 #ifndef SIGNALS_H
 #define SIGNALS_H
+#include <signal.h>
 
 #define SIGTEMP     (SIGRTMAX)
 #define SIGLIGHT    (SIGRTMAX-1)
