@@ -67,10 +67,26 @@ void LogHBhandler(int sig){
 
 int main(int argc, char* argv[])
 {
-        if(argc>1) {filename = (char*)malloc(sizeof(argv[1]));
-                    strcpy(filename,argv[1]);}
-        else {filename = (char*)malloc(sizeof(DEFAULT_FILE_NAME)); strcpy(filename, DEFAULT_FILE_NAME);}
+        if(argc>1) {
+                filename = (char*)malloc(sizeof(argv[1]));
+                strcpy(filename,argv[1]);
+        }
+        else {
+                filename = (char*)malloc(sizeof(DEFAULT_FILE_NAME));
+                strcpy(filename, DEFAULT_FILE_NAME);
+        }
         printf("Logfile name set to %s\n",filename);
+        printf("Enter Temp Format 0.CELCIUS  1.FARENHEIT  2.KELVIN\n");
+        int input;
+        scanf("%d",&input);
+
+        if(input == 0) temp_format = CELCIUS;
+        else if(input == 1) temp_format = FARENHEIT;
+        else if(input == 2) temp_format = KELVIN;
+        else input = CELCIUS;
+
+
+
         int ret;
         msg_pack = (notify_pack*)malloc(sizeof(notify_pack));
 /*****Disabling the Heartbeat on LED 0 to control through application*******/
@@ -81,7 +97,17 @@ int main(int argc, char* argv[])
         LED_CONTROL(0);
 #endif
 
-//pthread_mutex_init
+/******initialize mutex*****************/
+        ret =  pthread_mutex_init(&light_i2c_mutex,NULL);
+        if(ret == -1) perror("pthread_mutex_init");
+
+        ret = pthread_mutex_init(&temp_i2c_mutex,NULL);
+        if(ret == -1) perror("pthread_mutex_init");
+
+        ret = pthread_mutex_init(&i2c_mutex,NULL);
+        if(ret == -1) perror("pthread_mutex_init");
+
+
         if(msg_pack == NULL) {perror("malloc-main"); return -1;}
         printf("Entering Main- PID:%d\n",getpid());
         gclose_app = 1; gclose_light = 1; gclose_temp = 1;
@@ -289,6 +315,10 @@ int main(int argc, char* argv[])
         mq_unlink(IPC_LIGHT_MQ);
         mq_unlink(LOGGER_MQ);
         mq_unlink(NOTIFY_MQ);
+        pthread_mutex_destroy(&temp_i2c_mutex);
+        pthread_mutex_destroy(&light_i2c_mutex);
+        pthread_mutex_destroy(&i2c_mutex);
+
         free(msg_pack);
         free(filename);
         printf("Destroyed all opened Msg Ques\n");

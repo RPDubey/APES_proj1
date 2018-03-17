@@ -147,6 +147,7 @@ void *lightTask(void *pthread_inf) {
         float lumen;
         char data_lumen_str[BUF_SIZE-200];
         uint16_t ch0,ch1;
+        status day_night = DAY;
 
 #endif
 
@@ -217,6 +218,7 @@ void *lightTask(void *pthread_inf) {
 /************populate the log packet*********/
                 sprintf(data_lumen_str,"lumen %f", lumen);
                 strcpy(light_log.log_msg, data_lumen_str);
+
 #else
                 strcpy(light_log.log_msg, "Mock lumen");
 #endif
@@ -225,7 +227,6 @@ void *lightTask(void *pthread_inf) {
                 strcpy(light_log.time_stamp, asctime(tm));
 
 /************Log messages on Que*************/
-                //  sleep(30);
                 clock_gettime(CLOCK_MONOTONIC,&now);
                 expire.tv_sec = now.tv_sec+2;
                 expire.tv_nsec = now.tv_nsec;
@@ -236,6 +237,24 @@ void *lightTask(void *pthread_inf) {
                                          &expire);
                 if(num_bytes<0) {notify("mq_send-Log Q-lightTask",
                                         notify_msgq,logger_msgq,error);}
+
+#ifdef BBB
+                if(day_night != reportStatus(light)) {
+                        day_night = reportStatus(light);
+                        sprintf(data_lumen_str,"Day Night State change\n");
+                        strcpy(light_log.log_msg, data_lumen_str);
+
+                        num_bytes = mq_timedsend(logger_msgq,
+                                                 (const char*)&light_log,
+                                                 sizeof(log_pack),
+                                                 msg_prio,
+                                                 &expire);
+                        if(num_bytes<0) {notify("mq_send-Log Q-lightTask",
+                                                notify_msgq,logger_msgq,error);}
+
+                }
+
+#endif
 
 /******Log data on IPC Que if requested******/
 

@@ -28,6 +28,10 @@ int main(){
         int newsockfd;             // Client connected FD
         int num_char;              //No. of characters red/written
         struct sockaddr_in server_addr; //structure containing internet addresss.
+        printf("Enter 1 for temp in F, 2 for temp in C, 3 for Kelvin. 4 for DAY/NIGHT, 5 for lumens");
+        int input;
+        scanf("%d",&input);
+
 
         sock_req* request = (sock_req*)malloc(sizeof(sock_req));
         if(request==NULL) {printf("malloc Error: %s\n", strerror(errno)); return -1;}
@@ -53,8 +57,36 @@ int main(){
         ret = connect(sockfd,(struct sockaddr*)&server_addr,sizeof(server_addr));
         if(ret<0) {printf("connect Error:%s\n",strerror(errno)); return -1;}
 
+        switch(input) {
+        case 1:
+                request->sensor = temp;
+                request->tunit = FARENHEIT;
+                break;
+        case 2:
+                request->sensor = temp;
+                request->tunit = CELCIUS;
+                break;
+        case 3:
+                request->sensor = temp;
+                request->tunit = KELVIN;
+                break;
+        case 4:
+                request->sensor = light;
+                request->lunit = DAY_NIGHT;
+                break;
+        case 5:
+                request->sensor = light;
+                request->lunit = LUMEN;
+                break;
+
+        default:
+                request->sensor = temp;
+                request->tunit = CELCIUS;
+
+        }
+
 /******write to socket******/
-        request->sensor = light;
+
         num_char =  send(sockfd,request,sizeof(sock_req),0 );
         printf("message sent from child has %d bytes\n",num_char);
 

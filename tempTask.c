@@ -181,11 +181,11 @@ void *tempTask(void *pthread_inf) {
         notify(&init_message[6][0],notify_msgq,logger_msgq,init);
         notify(&init_message[7][0],notify_msgq,logger_msgq,init);
 
-        if(init_state == 0) { notify("##All elements not initialized in Temp Task, Not proceeding with it##\n",notify_msgq,logger_msgq,init);
+        if(init_state == 0) { notify("##All elements not initialized in Temp Task, Not proceeding with it##\n",notify_msgq,logger_msgq,error);
                               while(gclose_temp & gclose_app) {sleep(1);};
                               return NULL;}
 
-        else if(init_state == 1) notify("##All elements initialized in Temp Task, proceeding with it##\n",notify_msgq,logger_msgq,error);
+        else if(init_state == 1) notify("##All elements initialized in Temp Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
 
 /************Creating logpacket*******************/
         log_pack temp_log ={.log_level=1,.log_source = temperatue_Task};
@@ -207,7 +207,7 @@ void *tempTask(void *pthread_inf) {
 //collect temperatue
 #ifdef BBB
                 temperatureRead(temp,temp_data);
-                data_cel = temperatureConv(CELCIUS,temp_data);
+                data_cel = temperatureConv(temp_format,temp_data);
 
 /************populate the log packet*********/
                 sprintf(data_cel_str,"temperature %f", data_cel);

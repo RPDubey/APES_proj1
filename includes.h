@@ -13,6 +13,7 @@
 #define DEFAULT_FILE_NAME ("logfile.txt")
 char* filename;
 
+
 //#define BBB
 
 #ifdef BBB
@@ -23,11 +24,23 @@ char* filename;
                              if(status == 0) LED_OFF; }
 #endif
 
+pthread_mutex_t light_i2c_mutex;
+pthread_mutex_t temp_i2c_mutex;
+pthread_mutex_t i2c_mutex;
+
 typedef enum{
 	CELCIUS,
 	FARENHEIT,
 	KELVIN
 } temp_unit;
+
+typedef enum{
+	LUMEN,
+	DAY_NIGHT
+} light_unit;
+
+temp_unit temp_format;
+
 
 typedef enum{
 init,
@@ -64,7 +77,8 @@ light
 //request structure
   typedef struct {
   sensor_type sensor;
-  temp_unit unit;//if sensor is temperature
-  }sock_req;
+  temp_unit tunit;//if sensor is temperature
+  light_unit lunit;
+}sock_req;
 
 #endif

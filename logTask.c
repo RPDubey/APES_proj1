@@ -142,11 +142,11 @@ void *logTask(void *pthread_inf) {
         notify(&init_message[2][0],notify_msgq,-1,init);
         notify(&init_message[3][0],notify_msgq,-1,init);
 
-        if(init_state == 0) { notify("##All elements not initialized in Log Task. Not proceeding with it##\n",notify_msgq,logger_msgq,init);
+        if(init_state == 0) { notify("##All elements not initialized in Log Task. Not proceeding with it##\n",notify_msgq,logger_msgq,error);
                               while(gclose_log & gclose_app) {sleep(1);};
                               return NULL;}
 
-        else if(init_state == 1) notify("##All elements initialized in Log Task, proceeding with it##\n",notify_msgq,logger_msgq,error);
+        else if(init_state == 1) notify("##All elements initialized in Log Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
 
 
 /*******************Do this in LOOP************************************/

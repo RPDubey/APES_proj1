@@ -49,7 +49,7 @@ void *socketTask(void *pthread_inf) {
                               S_IRWXU, //mode-read,write and execute permission
                               &msgq_attr_err); //attribute
         sprintf(&(init_message[0][0]),"SocketTask-mq_open-notify mq %s\n",strerror(errno));
-        if(ret < 0) init_state =0;
+        if(notify_msgq < 0) init_state =0;
 
 /*******Initialize Logger Message Que*****************/
         mqd_t logger_msgq;
@@ -65,7 +65,7 @@ void *socketTask(void *pthread_inf) {
                               S_IRWXU, //mode-read,write and execute permission
                               &msgq_attr); //attribute
         sprintf(&(init_message[1][0]),"SocketTask-mq_open-logger mq %s\n",strerror(errno));
-        if(ret < 0) init_state =0;
+        if(logger_msgq < 0) init_state =0;
 
 
 /*************Sockets*****************************/
@@ -139,12 +139,12 @@ void *socketTask(void *pthread_inf) {
         notify(&init_message[6][0],notify_msgq,logger_msgq,init);
 
 
-        if(init_state == 0) { notify("##All elements not initialized in Socket Task, Not proceeding with it##\n",notify_msgq,logger_msgq,init);
+        if(init_state == 0) { notify("##All elements not initialized in Socket Task, Not proceeding with it##\n",notify_msgq,logger_msgq,error);
                               while(gclose_socket & gclose_app) {sleep(1);};
                               free(request); free(response);
                               return NULL;}
 
-        else if(init_state == 1) notify("##All elements initialized in Socket Task, proceeding with it##\n",notify_msgq,logger_msgq,error);
+        else if(init_state == 1) notify("##All elements initialized in Socket Task, proceeding with it##\n",notify_msgq,logger_msgq,init);
 
 #ifdef BBB
         int temp_handle = initializeTemp();//Get the Handler
@@ -206,17 +206,28 @@ void *socketTask(void *pthread_inf) {
 //collect data and populate the log packet
 #ifdef BBB
                 if(request->sensor==temp) {
+
                         temperatureRead(temp_handle,temp_data);
-                        data_cel = temperatureConv(CELCIUS,temp_data);
+                        if(request->tunit==CELCIUS) {data_cel = temperatureConv(CELCIUS,temp_data);}
+                        if(request->tunit==FARENHEIT) {data_cel = temperatureConv(FARENHEIT,temp_data);}
+                        if(request->tunit==KELVIN) {data_cel = temperatureConv(KELVIN,temp_data);}
                         sprintf(data_cel_str,"temperature %f", data_cel);
                         strcpy(response->log_msg, data_cel_str);
                 }
                 if(request->sensor==light) {
-                        ch0=adcDataRead(light,0);
-                        ch1=adcDataRead(light,1);
-                        lumen = reportLumen(ch0, ch1);
-                        sprintf(data_lumen_str,"lumen %f", lumen);
-                        strcpy(response->log_msg, data_lumen_str);
+                        if(request->lunit == LUMEN) {
+                                ch0=adcDataRead(light_handle,0);
+                                ch1=adcDataRead(light_handle,1);
+                                lumen = reportLumen(ch0, ch1);
+                                sprintf(data_lumen_str,"lumen %f", lumen);
+                                strcpy(response->log_msg, data_lumen_str);
+                        }
+                        if(request->lunit == DAY_NIGHT) {
+                                int r = reportStatus(light_handle);
+                                if(r == DAY) strcpy(response->log_msg, "DAY");
+                                else if(r == NIGHT) strcpy(response->log_msg, "NIGHT");
+
+                        }
                 }
 
 #else
