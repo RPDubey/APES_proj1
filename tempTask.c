@@ -24,15 +24,6 @@
   expire.tv_sec = now.tv_sec + 2;                                              \
   expire.tv_nsec = now.tv_nsec;
 
-sig_atomic_t temp_IPC_flag;
-
-void TemptIPChandler(int sig) {
-  if (sig == SIGTEMP_IPC) {
-    printf("Caught signal TemptIPChandler\n");
-    temp_IPC_flag = 1;
-  }
-}
-
 void *tempTask(void *pthread_inf) {
 
   uint8_t init_state = 1;
@@ -214,31 +205,31 @@ void *tempTask(void *pthread_inf) {
   struct timespec now, expire;
 
 #ifdef BBB
-  /*****Looging BBB configurations*******/
+/*****Logging BBB configurations*******/
+#ifdef REG_MANIPULATE
   char buffer[3];
+
   tlowRead(temp, buffer);
-  printf("TEMP SENSOR TLOW READ %x %x \n", buffer[0], buffer[1]);
+  printf("Temp Sensor TLOW Read %x %x \n", buffer[0], buffer[1]);
 
   thighWrite(temp, buffer);
   buffer[0] = buffer[1] = 0;
   thighRead(temp, buffer);
-  printf("TEMP SENSOR THIGH READ %x %x \n", buffer[0], buffer[1]);
+  printf("Temp Sensor THIGH Read %x %x \n", buffer[0], buffer[1]);
 
   buffer[0] = TEMP_CONFIG_REG;
   buffer[1] = SHUTDOWN_DI;
   configRegWrite(temp, buffer);
 
-  printf("TEMP SENSOR BEFORE SHUTDOWN %x %x \n", buffer[0], buffer[1]);
-
+  printf("Temp sensor shutdown disabled\n");
   buffer[0] = TEMP_CONFIG_REG;
   buffer[1] = SHUTDOWN_EN;
-
   configRegWrite(temp, buffer);
 
   buffer[0] = buffer[1] = 0;
   configRegRead(temp, buffer);
 
-  printf("TEMP SENSOR AFTER SHUTDOWN %x %x \n", buffer[0], buffer[1]);
+  printf("Temp Sensor after Shutdown Enabled %x %x \n", buffer[0], buffer[1]);
 
   buffer[0] = TEMP_CONFIG_REG;
   buffer[1] = SHUTDOWN_DI;
@@ -253,11 +244,14 @@ void *tempTask(void *pthread_inf) {
   buffer[0] = buffer[1] = 0;
   configRegRead(temp, buffer);
 
-  printf("TEMPSENSOR 10 BIT RESOLUTION, EMMODE AND CONV RATE 8Hz- %x %x \n",
+  printf("Temp Sensor set to 10bit resolution EMMODE &conv rate 8Hz- %x %x \n",
          buffer[0], buffer[1]);
 
-  printf("FAULT BITS ARE %d %d\n", (buffer[0] & 0x08) >> 3,
+  printf("Fault Bit Value %d %d\n", (buffer[0] & 0x08) >> 3,
          (buffer[0] & 0x10) >> 4);
+
+#endif
+
 #endif
 
   /****************Do this periodically*******************************/

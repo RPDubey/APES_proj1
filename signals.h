@@ -29,6 +29,21 @@ sig_atomic_t gclose_temp;
 sig_atomic_t gclose_socket;
 sig_atomic_t gclose_app;
 
+sig_atomic_t glight_HB_flag;
+sig_atomic_t gtemp_HB_flag;
+sig_atomic_t glog_HB_flag;
+sig_atomic_t gsocket_HB_flag;
+
+sig_atomic_t temp_IPC_flag;
+sig_atomic_t light_IPC_flag;
+
+void LightIPChandler(int sig);
+
+void TemptIPChandler(int sig);
+void SocketHBhandler(int sig);
+void LogHBhandler(int sig);
+void TempHBhandler(int sig);
+void LightHBhandler(int sig);
 /**
 *@brief:Signal handler for SIGINT
 *clears the global flag atomically to allow tasks to exit from while(1) loop and close *ques, file descriptors etc before exiting

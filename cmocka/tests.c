@@ -11,7 +11,7 @@
 #include "../sensors/tmp102Sensor.h"
 #include "../socket_client/client_test.h"
 
-void test_positive_temperature_conv(void **state) {
+void positive_temp_conv_test(void **state) {
   char buffer[2];
 
   // mock data
@@ -32,7 +32,7 @@ void test_positive_temperature_conv(void **state) {
   assert_int_equal((int)expected, (int)result);
 }
 
-void test_negative_temperature_conv(void **state) {
+void negative_temp_conv_test(void **state) {
   char buffer[2];
 
   // mock data
@@ -53,7 +53,7 @@ void test_negative_temperature_conv(void **state) {
   assert_int_equal((int)expected, (int)result);
 }
 
-void test_light_conv(void **state) {
+void light_conv_test(void **state) {
   uint16_t adc_data_ch0, adc_data_ch1;
 
   // mock data
@@ -65,7 +65,7 @@ void test_light_conv(void **state) {
   assert_int_equal((int)expected, (int)result);
 }
 
-void test_socket_task(void **state) {
+void socket_task_test(void **state) {
   //  int expected = 1;
   char buffer[4] = "Test";
   test_client_data(buffer, 1);
@@ -73,10 +73,10 @@ void test_socket_task(void **state) {
 }
 
 int main(void) {
-  const struct CMUnitTest tests[] = {
-      cmocka_unit_test(test_positive_temperature_conv),
-      cmocka_unit_test(test_negative_temperature_conv),
-      cmocka_unit_test(test_light_conv), cmocka_unit_test(test_socket_task)
+  const struct CMUnitTest tests[] = {cmocka_unit_test(positive_temp_conv_test),
+                                     cmocka_unit_test(negative_temp_conv_test),
+                                     cmocka_unit_test(light_conv_test),
+                                     cmocka_unit_test(socket_task_test)
 
   };
 

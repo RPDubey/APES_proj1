@@ -18,49 +18,6 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#define SLEEP(t)                                                               \
-  struct timespec current, remaining;                                          \
-  current.tv_nsec = 0;                                                         \
-  current.tv_sec = t;                                                          \
-  do {                                                                         \
-    ret = nanosleep(&current, &remaining);                                     \
-    if (ret == -1) {                                                           \
-      current.tv_sec = remaining.tv_sec;                                       \
-      current.tv_nsec = remaining.tv_nsec;                                     \
-    }                                                                          \
-  } while (ret != 0);
-
-sig_atomic_t glight_HB_flag;
-sig_atomic_t gtemp_HB_flag;
-sig_atomic_t glog_HB_flag;
-sig_atomic_t gsocket_HB_flag;
-
-void SocketHBhandler(int sig) {
-  if (sig == SIGSOCKET_HB) {
-    gsocket_HB_flag = 1;
-  }
-}
-
-void LightHBhandler(int sig) {
-  if (sig == SIGLIGHT_HB) {
-    //  printf("L");
-    glight_HB_flag = 1;
-  }
-}
-
-void TempHBhandler(int sig) {
-  if (sig == SIGTEMP_HB) {
-    //  printf("T");
-    gtemp_HB_flag = 1;
-  }
-}
-
-void LogHBhandler(int sig) {
-  if (sig == SIGLOG_HB) {
-    //    printf("l");
-    glog_HB_flag = 1;
-  }
-}
 
 int main(int argc, char *argv[]) {
   if (argc > 1) {

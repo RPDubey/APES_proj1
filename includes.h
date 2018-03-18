@@ -11,14 +11,30 @@
 #include"messageQue.h"
 #define PORT 8080
 #define DEFAULT_FILE_NAME ("logfile.txt")
-char* filename;
 
+#define SLEEP(t)                                                               \
+  struct timespec current, remaining;                                          \
+  current.tv_nsec = 0;                                                         \
+  current.tv_sec = t;                                                          \
+  do {                                                                         \
+    ret = nanosleep(&current, &remaining);                                     \
+    if (ret == -1) {                                                           \
+      current.tv_sec = remaining.tv_sec;                                       \
+      current.tv_nsec = remaining.tv_nsec;                                     \
+    }                                                                          \
+  } while (ret != 0);
+char* filename;
 
 #define BBB
 //#define TEST
+//#define REG_MANIPULATE
+
+#ifdef Test
+#undef BBB
+#endif
 
 #ifdef BBB
-
+#undef TEST
 #define LED_ON (system("echo 1 > /sys/class/leds/beaglebone:green:usr0/brightness"))
 #define LED_OFF (system("echo 0 > /sys/class/leds/beaglebone:green:usr0/brightness"))
 #define LED_CONTROL(status) {if(status == 1) LED_ON; \
