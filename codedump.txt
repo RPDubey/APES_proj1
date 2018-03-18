@@ -1,0 +1,2886 @@
+/*******************************************************************************
+   @Filename:main.c
+   @Brief: main for project1
+   @Author:Ravi Dubey
+   @Date:3/10/2018
+ ******************************************************************************/
+#include "includes.h"
+#include "messageQue.h"
+#include "notification.h"
+#include "signals.h"
+#include "threads.h"
+#include <errno.h>
+#include <mqueue.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+/*****************interrupt handler***************************/
+void pwrdn_sighandler(int signo) {
+  if (signo == SIGIO) {
+    printf("\n * * * * * * * * interrupt called * * * * * \n");
+    INTR_LED_ON;
+  }
+  return;
+}
+
+/************************************************************/
+
+int main(int argc, char *argv[]) {
+  if (argc > 1) {
+    filename = (char *)malloc(sizeof(argv[1]));
+    strcpy(filename, argv[1]);
+  } else {
+    filename = (char *)malloc(sizeof(DEFAULT_FILE_NAME));
+    strcpy(filename, DEFAULT_FILE_NAME);
+  }
+  printf("Logfile name set to %s\n", filename);
+  printf("Enter Temp Format 0.CELCIUS  1.FARENHEIT  2.KELVIN\n");
+  int input;
+  scanf("%d", &input);
+
+  if (input == 0)
+    temp_format = CELCIUS;
+  else if (input == 1)
+    temp_format = FARENHEIT;
+  else if (input == 2)
+    temp_format = KELVIN;
+  else
+    input = CELCIUS;
+
+  int ret;
+  msg_pack = (notify_pack *)malloc(sizeof(notify_pack));
+/*****Disabling the Heartbeat on LED 0 to control through application*******/
+#ifdef BBB
+  ret = system("echo none >/sys/class/leds/beaglebone:green:usr0/trigger");
+  if (ret == -1)
+    printf("sytem call error\n");
+  else
+    printf("Heart Beat switched off on LED0\n");
+  LED_CONTROL(0);
+#endif
+
+  /******initialize mutex*****************/
+  ret = pthread_mutex_init(&light_i2c_mutex, NULL);
+  if (ret == -1)
+    perror("pthread_mutex_init");
+
+  ret = pthread_mutex_init(&temp_i2c_mutex, NULL);
+  if (ret == -1)
+    perror("pthread_mutex_init");
+
+  ret = pthread_mutex_init(&i2c_mutex, NULL);
+  if (ret == -1)
+    perror("pthread_mutex_init");
+
+  if (msg_pack == NULL) {
+    perror("malloc-main");
+    return -1;
+  }
+  printf("Entering Main- PID:%d\n", getpid());
+  gclose_app = 1;
+  gclose_light = 1;
+  gclose_temp = 1;
+  gclose_log = 1;
+  gclose_socket = 1;
+  gtemp_HB_flag = 0;
+  glight_HB_flag = 0;
+  glog_HB_flag = 0;
+  gsocket_HB_flag = 0;
+  /*******************Masking SIgnals***********************/
+
+  // this thread will be inherited by all
+  sigset_t mask, mask_all; // set of signals
+  sigfillset(&mask_all);
+  ret =
+      pthread_sigmask(SIG_SETMASK, // block the signals in the set argument
+                      &mask_all,   // set argument has list of blocked signals
+                      NULL); // if non NULL prev val of signal mask stored here
+  if (ret == -1) {
+    printf("Main pthread_sigmask:%s\n", strerror(errno));
+    return -1;
+  }
+
+  /**************install SIGINT handler to close application through ctrl +
+   * c*************/
+  signal(SIGINT, SIGINT_handler);
+
+  /******initialize notification msgq*************************************/
+  mqd_t notify_msgq;
+  int msg_prio_err = MSG_PRIO_ERR;
+  int num_bytes_err;
+  struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                  .mq_msgsize =
+                                      BUF_SIZE, // max size of msg in bytes
+                                  .mq_flags = 0};
+
+  notify_msgq =
+      mq_open(NOTIFY_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr_err);  // attribute
+  if (notify_msgq < 0) {
+    perror("Main mq_open");
+    return -1;
+  }
+  // set up notification for this error
+
+  sig_ev_err.sigev_notify = SIGEV_THREAD; // notify by signal in sigev_signo
+  sig_ev_err.sigev_notify_function = notifyRcvThread;
+  sig_ev_err.sigev_notify_attributes = NULL;
+  sig_ev_err.sigev_value.sival_ptr =
+      &notify_msgq; // data passed with notification
+
+  // register for notification
+  ret = mq_notify(notify_msgq, &sig_ev_err);
+  if (ret == -1) {
+    perror("Main-mq_notify");
+    return -1;
+  }
+
+  // Register Light HB signal
+  struct sigaction action;
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = LightHBhandler;
+  ret = sigaction(SIGLIGHT_HB, &action, NULL);
+  if (ret == -1) {
+    perror("Main sigaction");
+    return -1;
+  }
+
+  // Register Temp HB signal
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = TempHBhandler;
+  ret = sigaction(SIGTEMP_HB, &action, NULL);
+  if (ret == -1) {
+    perror("Main sigaction");
+    return -1;
+  }
+
+  // Register Log HB signal
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = 0;
+  action.sa_handler = LogHBhandler;
+  ret = sigaction(SIGLOG_HB, &action, NULL);
+  if (ret == -1) {
+    perror("Main sigaction");
+    return -1;
+  }
+
+  // Register Socket HB signal
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = 0;
+  action.sa_handler = SocketHBhandler;
+  ret = sigaction(SIGSOCKET_HB, &action, NULL);
+  if (ret == -1) {
+    perror("Main sigaction");
+    return -1;
+  }
+
+  /******************Registering interrupt signal******************/
+  READY_LED;
+
+  int pwrdn_fd;
+  int count;
+  struct sigaction intr_action;
+
+  memset(&intr_action, 0, sizeof(intr_action));
+  intr_action.sa_handler = pwrdn_sighandler;
+  intr_action.sa_flags = 0;
+
+  sigaction(SIGIO, &intr_action, NULL);
+
+  pwrdn_fd = open("/dev/gpio_int", O_RDWR);
+
+  if (pwrdn_fd < 0) {
+    printf("Failed to open device\n");
+    // return 1;
+  }
+
+  fcntl(pwrdn_fd, F_SETOWN, getpid());
+  fcntl(pwrdn_fd, F_SETFL, fcntl(pwrdn_fd, F_GETFL) | FASYNC);
+
+  // create task threads
+  pthread_t temp, light, log, socket;
+  threadInfo temp_info;
+  temp_info.thread_id = 1;
+  temp_info.main = pthread_self();
+  threadInfo light_info;
+  light_info.thread_id = 2;
+  light_info.main = pthread_self();
+  threadInfo log_info;
+  log_info.thread_id = 3;
+  log_info.main = pthread_self();
+  threadInfo socket_info;
+  socket_info.thread_id = 3;
+  socket_info.main = pthread_self();
+
+  ret = pthread_create(&log, DEFAULT_THREAD_ATTR, logTask, (void *)&(log_info));
+  if (ret != 0) {
+    printf("Main pthread_create:%s\n", strerror(errno));
+    return -1;
+  }
+  sleep(1);
+  ret = pthread_create(&light, DEFAULT_THREAD_ATTR, lightTask,
+                       (void *)&(light_info));
+  if (ret != 0) {
+    printf("Main pthread_create:%s\n", strerror(errno));
+    return -1;
+  }
+  sleep(1);
+  ret = pthread_create(&temp, DEFAULT_THREAD_ATTR, tempTask,
+                       (void *)&(temp_info));
+  if (ret != 0) {
+    printf("Main pthread_create:%s\n", strerror(errno));
+    return -1;
+  }
+  sleep(1);
+  ret = pthread_create(&socket, DEFAULT_THREAD_ATTR, socketTask,
+                       (void *)&(socket_info));
+  if (ret != 0) {
+    printf("Main pthread_create:%s\n", strerror(errno));
+    return -1;
+  }
+
+  uint8_t read_bytes;
+  char choice;
+  uint8_t light_cancelled = 0;
+  uint8_t temp_cancelled = 0;
+  uint8_t log_cancelled = 0;
+  uint8_t socket_cancelled = 0;
+  SLEEP(1); // allow other threads to initialize
+
+  // required masks for main
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGTEMP);
+  sigaddset(&mask, SIGLIGHT);
+  sigaddset(&mask, SIGTEMP_IPC);
+  sigaddset(&mask, SIGLIGHT_IPC);
+  sigaddset(&mask, SIGLOG);
+  sigaddset(&mask, SIGCONT);
+
+  ret =
+      pthread_sigmask(SIG_SETMASK, // block the signals in the set argument
+                      &mask,       // set argument has list of blocked signals
+                      NULL); // if non NULL prev val of signal mask stored here
+  if (ret == -1) {
+    printf("Main pthread_sigmask:%s\n", strerror(errno));
+    return -1;
+  }
+
+  printf("\n*******************************************************************"
+         "\n");
+  printf(
+      " Enter thread to close 1-temp 2-light 3-log 4-socket 5-application\n");
+  printf(
+      "*******************************************************************\n");
+
+  while (gclose_app) {
+
+    // check HB signals every 5 seconds
+    SLEEP(5);
+    //  pthread_kill(socket,SIGCONT);//wake the socket to get its HB
+
+    printf("M");
+
+    if (light_cancelled == 0) {
+      if (glight_HB_flag == 0)
+        printf("NO HB from Light Task\n");
+      else {
+        printf("L");
+        glight_HB_flag = 0;
+      }
+    }
+
+    if (temp_cancelled == 0) {
+      if (gtemp_HB_flag == 0)
+        printf("NO HB from Temp Task\n");
+      else {
+        printf("T");
+        gtemp_HB_flag = 0;
+      }
+    }
+
+    if (log_cancelled == 0) {
+      if (glog_HB_flag == 0)
+        printf("NO HB from Log Task\n");
+      else {
+        printf("l");
+        glog_HB_flag = 0;
+      }
+    }
+    if (socket_cancelled == 0) {
+      if (gsocket_HB_flag == 0)
+        printf("NO HB from Socket Task\n");
+      else {
+        printf("S*");
+        gsocket_HB_flag = 0;
+      }
+    }
+    fflush(stdout);
+
+    read_bytes = read(0, &choice, sizeof(char));
+    if (read_bytes == 1) {
+      printf("\nchoice:%c\n", choice);
+      switch (choice) {
+      case '1':
+        if (temp_cancelled == 0) {
+          printf("sending close signal to temp task\n");
+          gclose_temp = 0;
+          temp_cancelled = 1;
+        }
+        break;
+      case '2':
+        if (light_cancelled == 0) {
+          printf("sending close signal to light task\n");
+          gclose_light = 0;
+          light_cancelled = 1;
+        }
+        break;
+      case '3':
+        if (log_cancelled == 0) {
+          printf("sending close signal to log task\n");
+          gclose_log = 0;
+          log_cancelled = 1;
+        }
+        break;
+      case '4':
+        if (socket_cancelled == 0) {
+          printf("sending close signal to socket task\n");
+          gclose_socket = 0;
+          pthread_kill(socket, SIGCONT);
+          socket_cancelled = 1;
+        }
+        break;
+
+      case '5':
+        printf("Closing application\n");
+        gclose_temp = 0;
+        gclose_light = 0;
+        gclose_log = 0;
+        gclose_socket = 0;
+        pthread_kill(socket, SIGCONT);
+        // pthread_cancel(temp); pthread_cancel(light);
+        // pthread_cancel(log);
+        gclose_app = 0;
+        break;
+      }
+      read_bytes = 0;
+    }
+  }
+  pthread_join(temp, NULL);
+  pthread_join(light, NULL);
+  pthread_join(log, NULL);
+  printf("Joined all threads\n");
+  mq_close(notify_msgq);
+
+  /*********destroy message Ques***********************/
+  mq_unlink(IPC_TEMP_MQ);
+  mq_unlink(IPC_LIGHT_MQ);
+  mq_unlink(LOGGER_MQ);
+  mq_unlink(NOTIFY_MQ);
+  pthread_mutex_destroy(&temp_i2c_mutex);
+  pthread_mutex_destroy(&light_i2c_mutex);
+  pthread_mutex_destroy(&i2c_mutex);
+
+  free(msg_pack);
+  free(filename);
+  printf("Destroyed all opened Msg Ques\n");
+
+  printf("***************Exiting***************\n");
+  return 0;
+}
+/*******************************************************************************
+   @Filename:messageQue.h
+   @Brief: contains message que macros
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#ifndef messageQue_H
+#define messageQue_H
+#include <mqueue.h>
+
+
+#define BUF_SIZE 4096
+#define MQ_MAXMSG 10
+#define MSG_PRIO  30
+#define MSG_PRIO_INIT 25
+#define MSG_PRIO_ERR 20
+
+#define LOGGER_MQ   "/logger_MQ"
+#define NOTIFY_MQ   "/error_MQ6"
+#define IPC_TEMP_MQ   "/IPC_TEMP_MQ"
+#define IPC_LIGHT_MQ   "/IPC_LIGHT_MQ"
+
+#endif
+/*******************************************************************************
+   @Filename:notification.h
+   @Brief: declaration for notification functions
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#ifndef ERRORHANDLING_H
+#define ERRORHANDLING_H
+
+#include"includes.h"
+
+notify_pack *msg_pack;
+
+struct sigevent sig_ev_err;
+
+/**
+*@brief:
+*this thread is created for mq_notify event on error message que
+*@param:
+*@return:
+*/
+void notifyRcvThread(union sigval sv);
+
+/**
+*@brief:
+*
+*@param:
+*@return:
+*/
+void notify(char* msg,mqd_t notify_msgq,mqd_t msgq_log,msg_type type);
+
+#endif
+/*******************************************************************************
+   @Filename:notification.c
+   @Brief: definition for notification(init and error) threads
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#include "includes.h"
+#include "messageQue.h"
+#include "notification.h"
+#include "signals.h"
+#include "threads.h"
+#include <errno.h>
+#include <mqueue.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+static pthread_mutex_t error_msg_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/****************puts initialization messages and errors on notify msg q and
+ * logger msg q. notify msg q is registered to notify main, which creates a
+ * thread to handle these conditions appropriately*************/
+void notify(char *msg, mqd_t notify_msgq, mqd_t logger_msgq, msg_type type) {
+  // char msg[BUF_SIZE];
+  // sprintf(msg,"%s:%s",arg_msg,strerror(errno));
+
+  notify_pack err_pack = {.type = type};
+  strcpy(err_pack.msg, msg);
+  struct timespec now, expire;
+  int num_bytes;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  expire.tv_sec = now.tv_sec + 2;
+  expire.tv_nsec = now.tv_nsec;
+  int prio;
+  if (type == init)
+    prio = MSG_PRIO_INIT;
+  else if (type == error)
+    prio = MSG_PRIO_ERR;
+
+  // log on notify msg q
+  if (notify_msgq >= 0) {
+    num_bytes = mq_timedsend(notify_msgq, (const char *)&err_pack,
+                             sizeof(err_pack), prio, &expire);
+    if (num_bytes < 0) {
+      perror("mq_send to notify_msgq in notify");
+    }
+  }
+  if (logger_msgq >= 0) {
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    log_pack err_log = {.log_level = 2, .log_source = error_handler};
+    strcpy(err_log.time_stamp, asctime(tm));
+    strcpy(err_log.log_msg, msg);
+
+    // log on logegr q
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    expire.tv_sec = now.tv_sec + 5;
+    expire.tv_nsec = now.tv_nsec;
+
+    num_bytes = mq_timedsend(logger_msgq, (const char *)&err_log,
+                             sizeof(log_pack), prio, &expire);
+    if (num_bytes < 0) {
+      perror("mq_send to logger_msgq in notify");
+    }
+  }
+
+  return;
+}
+
+/*This thread is invoked via mq_notify on main once any initialization or error
+ * message is put on notify_msgq
+ */
+void notifyRcvThread(union sigval sv) {
+  // read and print the error
+  if (sv.sival_ptr == NULL) {
+    printf("notifyRcvThread argument\n");
+    return;
+  }
+  mqd_t notify_msgq = *((mqd_t *)sv.sival_ptr);
+  struct timespec now, expire;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  expire.tv_sec = now.tv_sec + 2;
+  expire.tv_nsec = now.tv_nsec;
+  int num_bytes;
+  int error_flag = 0;
+  int ret = pthread_mutex_lock(&error_msg_lock);
+  if (ret != 0) {
+    perror("notifyRcvThread-mutexlock");
+    return;
+  }
+  // empty the logger_msgq - notification only for an empty q
+  do {
+    bzero(msg_pack, sizeof(msg_pack));
+
+    num_bytes = mq_timedreceive(notify_msgq, (char *)msg_pack,
+                                sizeof(notify_pack), NULL, &expire);
+    if (num_bytes > 0) {
+      printf("%s", ((notify_pack *)msg_pack)->msg);
+      if (((notify_pack *)msg_pack)->type == error)
+        error_flag = 1;
+    }
+
+  } while (num_bytes > 0);
+  ret = pthread_mutex_unlock(&error_msg_lock);
+  if (ret != 0) {
+    perror("notifyRcvThread-mutex unlock");
+    return;
+  }
+
+  // reregister for notification
+  ret = mq_notify(notify_msgq, &sig_ev_err);
+  if (ret == -1) {
+    perror("mq_notify-notifyRcvThread");
+    return;
+  }
+
+// For error condition turn on the LED
+#ifdef BBB
+  if (error_flag == 1)
+    LED_CONTROL(1);
+#endif
+
+  return;
+}
+/*******************************************************************************
+   @Filename:signals.c
+   @Brief:implements signal handlers
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#include "signals.h"
+#include "threads.h"
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+void LightIPChandler(int sig) {
+  if (sig == SIGLIGHT_IPC) {
+    printf("Caught signal LightIPChandler\n");
+    light_IPC_flag = 1;
+  }
+}
+
+void TemptIPChandler(int sig) {
+  if (sig == SIGTEMP_IPC) {
+    printf("Caught signal TemptIPChandler\n");
+    temp_IPC_flag = 1;
+  }
+}
+
+void SocketHBhandler(int sig) {
+  if (sig == SIGSOCKET_HB) {
+    gsocket_HB_flag = 1;
+  }
+}
+
+void LightHBhandler(int sig) {
+  if (sig == SIGLIGHT_HB) {
+    //  printf("L");
+    glight_HB_flag = 1;
+  }
+}
+
+void TempHBhandler(int sig) {
+  if (sig == SIGTEMP_HB) {
+    //  printf("T");
+    gtemp_HB_flag = 1;
+  }
+}
+
+void LogHBhandler(int sig) {
+  if (sig == SIGLOG_HB) {
+    //    printf("l");
+    glog_HB_flag = 1;
+  }
+}
+
+void SIGINT_handler(int sig) {
+  if (sig == SIGINT) {
+    gclose_app = 0;
+    printf("\ncleared gclose_app flag\n");
+  }
+}
+
+#define FREQ_NSEC (1000000000)
+
+void temp_sig_handler(int sig) {
+  // printf("caught temp signal %d\n",sig);
+  pthread_mutex_lock(&gtemp_mutex);
+  gtemp_flag = 1;
+  pthread_cond_signal(&gtemp_condition);
+  pthread_mutex_unlock(&gtemp_mutex);
+}
+
+void light_sig_handler(int sig) {
+  //    printf("caught light signal %d\n",sig);
+  pthread_mutex_lock(&glight_mutex);
+  glight_flag = 1;
+  pthread_cond_signal(&glight_condition);
+  pthread_mutex_unlock(&glight_mutex);
+}
+
+int setTempTimer() {
+  int ret;
+  /****** creating RT signal SIGTEMP with SA_RESTART flag for which 1 parameter
+   *** .sa_handler should be used for handler function(not
+   *.sa_sigaction)********/
+
+  struct sigaction sig_act = {
+      .sa_flags = SA_RESTART,        // three arguments
+      .sa_handler = temp_sig_handler // one arg method
+  };
+  //        sig_act.sa_mask = mask;
+  ret = sigaction(SIGTEMP, &sig_act, NULL);
+  if (ret == -1)
+    return -1;
+  /***********************Creating the timer*********************/
+
+  /*sigevent struct specifies how the caller should be notified on timer
+   * expiry*/
+  timer_t timerid;
+  struct sigevent sig_ev = {
+      .sigev_notify = SIGEV_SIGNAL,     // notify by signal in sigev_signo
+      .sigev_signo = SIGTEMP,           // Notification Signal
+      .sigev_value.sival_ptr = &timerid // data passed with notification
+  };
+
+  ret = timer_create(CLOCK_MONOTONIC,
+                     &sig_ev, // signal notification on timer expiry
+                     &timerid // function places the id of the timer here
+                     );
+  if (ret == -1)
+    return -1;
+
+  /******************* start the timer*******************/
+  struct itimerspec its = {.it_value.tv_sec =
+                               3, // start after 3 seconds(initial value)
+                           .it_value.tv_nsec = 0,
+                           .it_interval.tv_sec = FREQ_NSEC / 1000000000,
+                           .it_interval.tv_nsec = FREQ_NSEC % 1000000000};
+  ret = timer_settime(timerid,
+                      0,    // No flags
+                      &its, // timer specs
+                      NULL  // if non null, old timer specs returned here
+                      );
+  if (ret == -1)
+    return -1;
+
+  return 1;
+}
+
+int setLightTimer() {
+  int ret;
+  /****** creating RT signal SIGRTMIN+1 with SA_RESTART flag for which 1
+     parameter
+     .sa_handler should be used for handler function(not .sa_sigaction)********/
+
+  struct sigaction sig_act = {
+      .sa_flags = SA_RESTART,         // three arguments
+      .sa_handler = light_sig_handler // one arg method
+  };
+  //  sig_act.sa_mask=mask;
+  ret = sigaction(SIGLIGHT, &sig_act, NULL);
+  if (ret == -1)
+    return -1;
+
+  /***********************Creating the timer*********************/
+
+  timer_t timerid;
+  /*sigevent struct specifies how the caller should be notified on timer
+   * expiry*/
+  struct sigevent sig_ev = {
+      .sigev_notify = SIGEV_SIGNAL,     // notify by signal in sigev_signo
+      .sigev_signo = SIGLIGHT,          // Notification Signal
+      .sigev_value.sival_ptr = &timerid // data passed with notification
+  };
+
+  ret = timer_create(CLOCK_MONOTONIC,
+                     &sig_ev, // signal notification on timer expiry
+                     &timerid // function places the id of the timer here
+                     );
+  if (ret == -1)
+    return -1;
+
+  /******************* start the timer*******************/
+  struct itimerspec its = {.it_value.tv_sec =
+                               3, // start after 3 seconds(initial value)
+                           .it_value.tv_nsec = 0,
+                           .it_interval.tv_sec = FREQ_NSEC / 1000000000,
+                           .it_interval.tv_nsec = FREQ_NSEC % 1000000000};
+  ret = timer_settime(timerid,
+                      0,    // No flags
+                      &its, // timer specs
+                      NULL  // if non null, old timer specs returned here
+                      );
+  if (ret == -1)
+    return -1;
+  return 1;
+}
+/*******************************************************************************
+   @Filename:signals.c
+   @Brief:implements signal handlers
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#include "signals.h"
+#include "threads.h"
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+void LightIPChandler(int sig) {
+  if (sig == SIGLIGHT_IPC) {
+    printf("Caught signal LightIPChandler\n");
+    light_IPC_flag = 1;
+  }
+}
+
+void TemptIPChandler(int sig) {
+  if (sig == SIGTEMP_IPC) {
+    printf("Caught signal TemptIPChandler\n");
+    temp_IPC_flag = 1;
+  }
+}
+
+void SocketHBhandler(int sig) {
+  if (sig == SIGSOCKET_HB) {
+    gsocket_HB_flag = 1;
+  }
+}
+
+void LightHBhandler(int sig) {
+  if (sig == SIGLIGHT_HB) {
+    //  printf("L");
+    glight_HB_flag = 1;
+  }
+}
+
+void TempHBhandler(int sig) {
+  if (sig == SIGTEMP_HB) {
+    //  printf("T");
+    gtemp_HB_flag = 1;
+  }
+}
+
+void LogHBhandler(int sig) {
+  if (sig == SIGLOG_HB) {
+    //    printf("l");
+    glog_HB_flag = 1;
+  }
+}
+
+void SIGINT_handler(int sig) {
+  if (sig == SIGINT) {
+    gclose_app = 0;
+    printf("\ncleared gclose_app flag\n");
+  }
+}
+
+#define FREQ_NSEC (1000000000)
+
+void temp_sig_handler(int sig) {
+  // printf("caught temp signal %d\n",sig);
+  pthread_mutex_lock(&gtemp_mutex);
+  gtemp_flag = 1;
+  pthread_cond_signal(&gtemp_condition);
+  pthread_mutex_unlock(&gtemp_mutex);
+}
+
+void light_sig_handler(int sig) {
+  //    printf("caught light signal %d\n",sig);
+  pthread_mutex_lock(&glight_mutex);
+  glight_flag = 1;
+  pthread_cond_signal(&glight_condition);
+  pthread_mutex_unlock(&glight_mutex);
+}
+
+int setTempTimer() {
+  int ret;
+  /****** creating RT signal SIGTEMP with SA_RESTART flag for which 1 parameter
+   *** .sa_handler should be used for handler function(not
+   *.sa_sigaction)********/
+
+  struct sigaction sig_act = {
+      .sa_flags = SA_RESTART,        // three arguments
+      .sa_handler = temp_sig_handler // one arg method
+  };
+  //        sig_act.sa_mask = mask;
+  ret = sigaction(SIGTEMP, &sig_act, NULL);
+  if (ret == -1)
+    return -1;
+  /***********************Creating the timer*********************/
+
+  /*sigevent struct specifies how the caller should be notified on timer
+   * expiry*/
+  timer_t timerid;
+  struct sigevent sig_ev = {
+      .sigev_notify = SIGEV_SIGNAL,     // notify by signal in sigev_signo
+      .sigev_signo = SIGTEMP,           // Notification Signal
+      .sigev_value.sival_ptr = &timerid // data passed with notification
+  };
+
+  ret = timer_create(CLOCK_MONOTONIC,
+                     &sig_ev, // signal notification on timer expiry
+                     &timerid // function places the id of the timer here
+                     );
+  if (ret == -1)
+    return -1;
+
+  /******************* start the timer*******************/
+  struct itimerspec its = {.it_value.tv_sec =
+                               3, // start after 3 seconds(initial value)
+                           .it_value.tv_nsec = 0,
+                           .it_interval.tv_sec = FREQ_NSEC / 1000000000,
+                           .it_interval.tv_nsec = FREQ_NSEC % 1000000000};
+  ret = timer_settime(timerid,
+                      0,    // No flags
+                      &its, // timer specs
+                      NULL  // if non null, old timer specs returned here
+                      );
+  if (ret == -1)
+    return -1;
+
+  return 1;
+}
+
+int setLightTimer() {
+  int ret;
+  /****** creating RT signal SIGRTMIN+1 with SA_RESTART flag for which 1
+     parameter
+     .sa_handler should be used for handler function(not .sa_sigaction)********/
+
+  struct sigaction sig_act = {
+      .sa_flags = SA_RESTART,         // three arguments
+      .sa_handler = light_sig_handler // one arg method
+  };
+  //  sig_act.sa_mask=mask;
+  ret = sigaction(SIGLIGHT, &sig_act, NULL);
+  if (ret == -1)
+    return -1;
+
+  /***********************Creating the timer*********************/
+
+  timer_t timerid;
+  /*sigevent struct specifies how the caller should be notified on timer
+   * expiry*/
+  struct sigevent sig_ev = {
+      .sigev_notify = SIGEV_SIGNAL,     // notify by signal in sigev_signo
+      .sigev_signo = SIGLIGHT,          // Notification Signal
+      .sigev_value.sival_ptr = &timerid // data passed with notification
+  };
+
+  ret = timer_create(CLOCK_MONOTONIC,
+                     &sig_ev, // signal notification on timer expiry
+                     &timerid // function places the id of the timer here
+                     );
+  if (ret == -1)
+    return -1;
+
+  /******************* start the timer*******************/
+  struct itimerspec its = {.it_value.tv_sec =
+                               3, // start after 3 seconds(initial value)
+                           .it_value.tv_nsec = 0,
+                           .it_interval.tv_sec = FREQ_NSEC / 1000000000,
+                           .it_interval.tv_nsec = FREQ_NSEC % 1000000000};
+  ret = timer_settime(timerid,
+                      0,    // No flags
+                      &its, // timer specs
+                      NULL  // if non null, old timer specs returned here
+                      );
+  if (ret == -1)
+    return -1;
+  return 1;
+}
+/*******************************************************************************
+   @Filename:signals.h
+   @Brief:declaration for signal handler functions and associated variables
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#ifndef SIGNALS_H
+#define SIGNALS_H
+#include <signal.h>
+
+#define SIGTEMP     (SIGRTMAX)
+#define SIGLIGHT    (SIGRTMAX-1)
+
+#define SIGLIGHT_HB (SIGRTMAX-2)
+#define SIGTEMP_HB  (SIGRTMAX-3)
+#define SIGLOG_HB  (SIGRTMAX-4)
+
+#define SIGTEMP_IPC (SIGRTMAX-5)
+#define SIGLIGHT_IPC (SIGRTMAX-6)
+
+#define SIGLOG (SIGRTMAX-7)
+
+#define SIGSOCKET_HB  (SIGRTMAX-8)
+
+
+sig_atomic_t gclose_light;
+sig_atomic_t gclose_log;
+sig_atomic_t gclose_temp;
+sig_atomic_t gclose_socket;
+sig_atomic_t gclose_app;
+
+sig_atomic_t glight_HB_flag;
+sig_atomic_t gtemp_HB_flag;
+sig_atomic_t glog_HB_flag;
+sig_atomic_t gsocket_HB_flag;
+
+sig_atomic_t temp_IPC_flag;
+sig_atomic_t light_IPC_flag;
+
+void LightIPChandler(int sig);
+
+void TemptIPChandler(int sig);
+void SocketHBhandler(int sig);
+void LogHBhandler(int sig);
+void TempHBhandler(int sig);
+void LightHBhandler(int sig);
+/**
+*@brief:Signal handler for SIGINT
+*clears the global flag atomically to allow tasks to exit from while(1) loop and close *ques, file descriptors etc before exiting
+*@param:signal no.
+*@return: no returns
+*/
+void SIGINT_handler(int sig);
+
+
+/**
+*@brief:sets timer and signal handler for timer notification for temp task
+*@param:void
+*@return: int success/failure
+*/
+int setTempTimer();
+
+/**
+*@brief:sets timer and signal handler for light task
+*@param:void
+*@return: int success/failure
+*/
+int setLightTimer();
+
+
+/**
+*@brief:Signal handler for temp task
+*sets the global flag atomically and signals the temp task throught a condition *variable to read next data
+*@param:signal no.
+*@return: no returns
+*/
+void temp_sig_handler(int sig);
+
+/**
+*@brief:Signal handler for light task
+*sets the global flag atomically and signals the light task throught a *condition variable to read next data
+*@param:signal no.
+*@return: no returns
+*/
+void light_sig_handler(int sig);
+
+
+#endif
+/*******************************************************************************
+   @Filename:socketTask.c
+   @Brief:implements Socket Task
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#include "./sensors/adps9301Sensor.h"
+#include "./sensors/tmp102Sensor.h"
+#include "includes.h"
+#include "messageQue.h"
+#include "notification.h"
+#include "signals.h"
+#include "threads.h"
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <mqueue.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+void *socketTask(void *pthread_inf) {
+
+  uint8_t init_state = 1;
+  char init_message[7][sizeof(notify_pack)];
+
+  int ret;
+  threadInfo *ppthread_info = (threadInfo *)pthread_inf;
+  /*******Initialize Notification  Message Que*****************/
+  mqd_t notify_msgq;
+  int msg_prio_err = MSG_PRIO_ERR;
+  int num_bytes_err;
+  struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                  .mq_msgsize =
+                                      BUF_SIZE, // max size of msg in bytes
+                                  .mq_flags = 0};
+
+  notify_msgq =
+      mq_open(NOTIFY_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr_err);  // attribute
+  sprintf(&(init_message[0][0]), "SocketTask-mq_open-notify mq %s\n",
+          strerror(errno));
+  if (notify_msgq < 0)
+    init_state = 0;
+
+  /*******Initialize Logger Message Que*****************/
+  mqd_t logger_msgq;
+  int msg_prio = MSG_PRIO;
+  int num_bytes;
+  char message[BUF_SIZE];
+  struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                              .mq_msgsize =
+                                  BUF_SIZE, // max size of msg in bytes
+                              .mq_flags = 0};
+
+  logger_msgq =
+      mq_open(LOGGER_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr);      // attribute
+  sprintf(&(init_message[1][0]), "SocketTask-mq_open-logger mq %s\n",
+          strerror(errno));
+  if (logger_msgq < 0)
+    init_state = 0;
+
+  /*************Sockets*****************************/
+  // user defined data structures for data read and write
+  sock_req *request = (sock_req *)malloc(sizeof(sock_req));
+  if (request == NULL) {
+    printf("malloc Error: %s\n", strerror(errno));
+    return NULL;
+  }
+
+  log_pack *response = (log_pack *)malloc(sizeof(log_pack));
+  if (response == NULL) {
+    printf("malloc Error: %s\n", strerror(errno));
+    return NULL;
+  }
+
+  int sockfd;                     // listening FD
+  int newsockfd;                  // Client connected FD
+  int num_char;                   // No. of characters red/written
+  struct sockaddr_in server_addr; // structure containing internet addresss.
+
+  int opt = 1;
+  /****Create a new socket*******/
+  sockfd = socket(AF_INET,                     // com domain - IPv4
+                  SOCK_STREAM | SOCK_NONBLOCK, // com type - TCP
+                  0);                          // protocol
+  sprintf(&(init_message[2][0]), "SocketTask-socket %s\n", strerror(errno));
+  if (sockfd < 0)
+    init_state = 0;
+
+  /*****set options for the socket***********/
+  ret = setsockopt(sockfd,
+                   SOL_SOCKET, // Socket Level Protocol
+                   SO_REUSEADDR | SO_REUSEPORT,
+                   &opt, // option is enabled
+                   sizeof(opt));
+  sprintf(&(init_message[3][0]), "SocketTask-setsockopt %s\n", strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+  /***initialize the address structure and bind socket ****/
+  bzero((char *)&server_addr, sizeof(server_addr)); // sets all val to 0
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port = htons(PORT);
+  ret = bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+  sprintf(&(init_message[4][0]), "SocketTask-bind %s\n", strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+
+  /**listen on socket for connections**/
+  ret = listen(sockfd, 5);
+  sprintf(&(init_message[6][0]), "SocketTask-listen %s\n", strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+
+  /*****************Mask SIGNALS********************/
+  sigset_t mask; // set of signals
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGTEMP);
+  sigaddset(&mask, SIGTEMP_HB);
+  sigaddset(&mask, SIGLIGHT_HB);
+  sigaddset(&mask, SIGLIGHT);
+  sigaddset(&mask, SIGLOG_HB);
+  sigaddset(&mask, SIGLOG);
+  sigaddset(&mask, SIGTEMP_IPC);
+  sigaddset(&mask, SIGLIGHT_IPC);
+
+  ret =
+      pthread_sigmask(SIG_SETMASK, // block the signals in the set argument
+                      &mask,       // set argument has list of blocked signals
+                      NULL); // if non NULL prev val of signal mask stored here
+  sprintf(&(init_message[5][0]), "SocketTask-pthread_sigmask %s\n",
+          strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+
+  notify(&init_message[0][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[1][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[2][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[3][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[4][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[5][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[6][0], notify_msgq, logger_msgq, init);
+
+  if (init_state == 0) {
+    notify("##All elements not initialized in Socket Task, Not proceeding with "
+           "it##\n",
+           notify_msgq, logger_msgq, error);
+    while (gclose_socket & gclose_app) {
+      sleep(1);
+    };
+    free(request);
+    free(response);
+    return NULL;
+  }
+
+  else if (init_state == 1)
+    notify("##All elements initialized in Socket Task, proceeding with it##\n",
+           notify_msgq, logger_msgq, init);
+
+#ifdef BBB
+  int temp_handle = initializeTemp(); // Get the Handler
+  char temp_data[2], data_cel_str[BUF_SIZE - 200];
+  float data_cel;
+
+  int light_handle = initializeLight(); // Get the handler
+  char lightbuffer[1];
+  commandReg(light_handle, CONTROL, WRITE);
+  controlReg(light_handle, WRITE, ENABLE, lightbuffer);
+  float lumen;
+  char data_lumen_str[BUF_SIZE - 200];
+  uint16_t ch0, ch1;
+
+#endif
+
+  /****block until the client connects to the server and gets its address*****/
+  struct sockaddr_in client_addr;
+  socklen_t addrlen = sizeof(client_addr); // size of address of client
+
+  // keep doing this repeatedly
+  while (gclose_socket & gclose_app) {
+    pthread_kill(ppthread_info->main, SIGSOCKET_HB); // send HB
+
+    while (1) {
+      if ((gclose_socket & gclose_app) == 0)
+        break;
+
+      newsockfd = accept(sockfd, (struct sockaddr *)&client_addr,
+                         (socklen_t *)&addrlen);
+      if ((newsockfd > 0))
+        break;
+      else
+        sleep(1);
+      // send HB to main
+      pthread_kill(ppthread_info->main, SIGSOCKET_HB); // send HB
+    }
+    if ((gclose_socket & gclose_app) == 0)
+      break;
+
+    /*****beyond this, execution happens only after client is connected******/
+    // prepopulate static elements of response packet
+    response->log_source = RemoteRequestSocket_Task;
+    response->log_level = 3;
+
+    /****read from the client and write to it*******/
+
+    bzero(request, sizeof(sock_req));
+
+    num_char = read(newsockfd, (char *)request, sizeof(sock_req));
+    if (num_char < 0) {
+      notify("Socket Task read error", notify_msgq, logger_msgq, error);
+      break;
+    }
+
+    // find the sensor requested to to probe and probe the sensor
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    strcpy(response->time_stamp, asctime(tm));
+
+// collect data and populate the log packet
+#ifdef BBB
+    if (request->sensor == temp) {
+
+      temperatureRead(temp_handle, temp_data);
+      if (request->tunit == CELCIUS) {
+        data_cel = temperatureConv(CELCIUS, temp_data);
+      }
+      if (request->tunit == FARENHEIT) {
+        data_cel = temperatureConv(FARENHEIT, temp_data);
+      }
+      if (request->tunit == KELVIN) {
+        data_cel = temperatureConv(KELVIN, temp_data);
+      }
+      sprintf(data_cel_str, "temperature %f", data_cel);
+      strcpy(response->log_msg, data_cel_str);
+    }
+    if (request->sensor == light) {
+      if (request->lunit == LUMEN) {
+        ch0 = adcDataRead(light_handle, 0);
+        ch1 = adcDataRead(light_handle, 1);
+        lumen = reportLumen(ch0, ch1);
+        sprintf(data_lumen_str, "lumen %f", lumen);
+        strcpy(response->log_msg, data_lumen_str);
+      }
+      if (request->lunit == DAY_NIGHT) {
+        int r = reportStatus(light_handle);
+        if (r == DAY)
+          strcpy(response->log_msg, "DAY");
+        else if (r == NIGHT)
+          strcpy(response->log_msg, "NIGHT");
+      }
+    }
+
+#else
+    if (request->sensor == temp) {
+      strcpy(response->log_msg, "TEMP");
+    }
+    if (request->sensor == light) {
+      strcpy(response->log_msg, "LIGHT");
+    }
+#endif
+    // send the read data
+    num_char = write(newsockfd, response, sizeof(log_pack));
+    if (num_char < 0) {
+      notify("Socket Task write error", notify_msgq, logger_msgq, error);
+      break;
+    }
+
+    //                sleep(2);
+  }
+  printf("Exiting Socket Task\n");
+  free(request);
+  free(response);
+
+  return NULL;
+}
+/*******************************************************************************
+   @Filename:socketTask.c
+   @Brief:implements Socket Task
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#include "./sensors/adps9301Sensor.h"
+#include "./sensors/tmp102Sensor.h"
+#include "includes.h"
+#include "messageQue.h"
+#include "notification.h"
+#include "signals.h"
+#include "threads.h"
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <mqueue.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+void *socketTask(void *pthread_inf) {
+
+  uint8_t init_state = 1;
+  char init_message[7][sizeof(notify_pack)];
+
+  int ret;
+  threadInfo *ppthread_info = (threadInfo *)pthread_inf;
+  /*******Initialize Notification  Message Que*****************/
+  mqd_t notify_msgq;
+  int msg_prio_err = MSG_PRIO_ERR;
+  int num_bytes_err;
+  struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                  .mq_msgsize =
+                                      BUF_SIZE, // max size of msg in bytes
+                                  .mq_flags = 0};
+
+  notify_msgq =
+      mq_open(NOTIFY_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr_err);  // attribute
+  sprintf(&(init_message[0][0]), "SocketTask-mq_open-notify mq %s\n",
+          strerror(errno));
+  if (notify_msgq < 0)
+    init_state = 0;
+
+  /*******Initialize Logger Message Que*****************/
+  mqd_t logger_msgq;
+  int msg_prio = MSG_PRIO;
+  int num_bytes;
+  char message[BUF_SIZE];
+  struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                              .mq_msgsize =
+                                  BUF_SIZE, // max size of msg in bytes
+                              .mq_flags = 0};
+
+  logger_msgq =
+      mq_open(LOGGER_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr);      // attribute
+  sprintf(&(init_message[1][0]), "SocketTask-mq_open-logger mq %s\n",
+          strerror(errno));
+  if (logger_msgq < 0)
+    init_state = 0;
+
+  /*************Sockets*****************************/
+  // user defined data structures for data read and write
+  sock_req *request = (sock_req *)malloc(sizeof(sock_req));
+  if (request == NULL) {
+    printf("malloc Error: %s\n", strerror(errno));
+    return NULL;
+  }
+
+  log_pack *response = (log_pack *)malloc(sizeof(log_pack));
+  if (response == NULL) {
+    printf("malloc Error: %s\n", strerror(errno));
+    return NULL;
+  }
+
+  int sockfd;                     // listening FD
+  int newsockfd;                  // Client connected FD
+  int num_char;                   // No. of characters red/written
+  struct sockaddr_in server_addr; // structure containing internet addresss.
+
+  int opt = 1;
+  /****Create a new socket*******/
+  sockfd = socket(AF_INET,                     // com domain - IPv4
+                  SOCK_STREAM | SOCK_NONBLOCK, // com type - TCP
+                  0);                          // protocol
+  sprintf(&(init_message[2][0]), "SocketTask-socket %s\n", strerror(errno));
+  if (sockfd < 0)
+    init_state = 0;
+
+  /*****set options for the socket***********/
+  ret = setsockopt(sockfd,
+                   SOL_SOCKET, // Socket Level Protocol
+                   SO_REUSEADDR | SO_REUSEPORT,
+                   &opt, // option is enabled
+                   sizeof(opt));
+  sprintf(&(init_message[3][0]), "SocketTask-setsockopt %s\n", strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+  /***initialize the address structure and bind socket ****/
+  bzero((char *)&server_addr, sizeof(server_addr)); // sets all val to 0
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port = htons(PORT);
+  ret = bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+  sprintf(&(init_message[4][0]), "SocketTask-bind %s\n", strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+
+  /**listen on socket for connections**/
+  ret = listen(sockfd, 5);
+  sprintf(&(init_message[6][0]), "SocketTask-listen %s\n", strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+
+  /*****************Mask SIGNALS********************/
+  sigset_t mask; // set of signals
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGTEMP);
+  sigaddset(&mask, SIGTEMP_HB);
+  sigaddset(&mask, SIGLIGHT_HB);
+  sigaddset(&mask, SIGLIGHT);
+  sigaddset(&mask, SIGLOG_HB);
+  sigaddset(&mask, SIGLOG);
+  sigaddset(&mask, SIGTEMP_IPC);
+  sigaddset(&mask, SIGLIGHT_IPC);
+
+  ret =
+      pthread_sigmask(SIG_SETMASK, // block the signals in the set argument
+                      &mask,       // set argument has list of blocked signals
+                      NULL); // if non NULL prev val of signal mask stored here
+  sprintf(&(init_message[5][0]), "SocketTask-pthread_sigmask %s\n",
+          strerror(errno));
+  if (ret < 0)
+    init_state = 0;
+
+  notify(&init_message[0][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[1][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[2][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[3][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[4][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[5][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[6][0], notify_msgq, logger_msgq, init);
+
+  if (init_state == 0) {
+    notify("##All elements not initialized in Socket Task, Not proceeding with "
+           "it##\n",
+           notify_msgq, logger_msgq, error);
+    while (gclose_socket & gclose_app) {
+      sleep(1);
+    };
+    free(request);
+    free(response);
+    return NULL;
+  }
+
+  else if (init_state == 1)
+    notify("##All elements initialized in Socket Task, proceeding with it##\n",
+           notify_msgq, logger_msgq, init);
+
+#ifdef BBB
+  int temp_handle = initializeTemp(); // Get the Handler
+  char temp_data[2], data_cel_str[BUF_SIZE - 200];
+  float data_cel;
+
+  int light_handle = initializeLight(); // Get the handler
+  char lightbuffer[1];
+  commandReg(light_handle, CONTROL, WRITE);
+  controlReg(light_handle, WRITE, ENABLE, lightbuffer);
+  float lumen;
+  char data_lumen_str[BUF_SIZE - 200];
+  uint16_t ch0, ch1;
+
+#endif
+
+  /****block until the client connects to the server and gets its address*****/
+  struct sockaddr_in client_addr;
+  socklen_t addrlen = sizeof(client_addr); // size of address of client
+
+  // keep doing this repeatedly
+  while (gclose_socket & gclose_app) {
+    pthread_kill(ppthread_info->main, SIGSOCKET_HB); // send HB
+
+    while (1) {
+      if ((gclose_socket & gclose_app) == 0)
+        break;
+
+      newsockfd = accept(sockfd, (struct sockaddr *)&client_addr,
+                         (socklen_t *)&addrlen);
+      if ((newsockfd > 0))
+        break;
+      else
+        sleep(1);
+      // send HB to main
+      pthread_kill(ppthread_info->main, SIGSOCKET_HB); // send HB
+    }
+    if ((gclose_socket & gclose_app) == 0)
+      break;
+
+    /*****beyond this, execution happens only after client is connected******/
+    // prepopulate static elements of response packet
+    response->log_source = RemoteRequestSocket_Task;
+    response->log_level = 3;
+
+    /****read from the client and write to it*******/
+
+    bzero(request, sizeof(sock_req));
+
+    num_char = read(newsockfd, (char *)request, sizeof(sock_req));
+    if (num_char < 0) {
+      notify("Socket Task read error", notify_msgq, logger_msgq, error);
+      break;
+    }
+
+    // find the sensor requested to to probe and probe the sensor
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    strcpy(response->time_stamp, asctime(tm));
+
+// collect data and populate the log packet
+#ifdef BBB
+    if (request->sensor == temp) {
+
+      temperatureRead(temp_handle, temp_data);
+      if (request->tunit == CELCIUS) {
+        data_cel = temperatureConv(CELCIUS, temp_data);
+      }
+      if (request->tunit == FARENHEIT) {
+        data_cel = temperatureConv(FARENHEIT, temp_data);
+      }
+      if (request->tunit == KELVIN) {
+        data_cel = temperatureConv(KELVIN, temp_data);
+      }
+      sprintf(data_cel_str, "temperature %f", data_cel);
+      strcpy(response->log_msg, data_cel_str);
+    }
+    if (request->sensor == light) {
+      if (request->lunit == LUMEN) {
+        ch0 = adcDataRead(light_handle, 0);
+        ch1 = adcDataRead(light_handle, 1);
+        lumen = reportLumen(ch0, ch1);
+        sprintf(data_lumen_str, "lumen %f", lumen);
+        strcpy(response->log_msg, data_lumen_str);
+      }
+      if (request->lunit == DAY_NIGHT) {
+        int r = reportStatus(light_handle);
+        if (r == DAY)
+          strcpy(response->log_msg, "DAY");
+        else if (r == NIGHT)
+          strcpy(response->log_msg, "NIGHT");
+      }
+    }
+
+#else
+    if (request->sensor == temp) {/*******************************************************************************
+       @Filename:socketTask.c
+       @Brief:implements Socket Task
+       @Author:Ravi Dubey
+       @Date:3/14/2018
+     ******************************************************************************/
+    #include "./sensors/adps9301Sensor.h"
+    #include "./sensors/tmp102Sensor.h"
+    #include "includes.h"
+    #include "messageQue.h"
+    #include "notification.h"
+    #include "signals.h"
+    #include "threads.h"
+    #include <arpa/inet.h>
+    #include <errno.h>
+    #include <fcntl.h>
+    #include <mqueue.h>
+    #include <netinet/in.h>
+    #include <pthread.h>
+    #include <signal.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <sys/mman.h>
+    #include <sys/socket.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <time.h>
+    #include <unistd.h>
+
+    void *socketTask(void *pthread_inf) {
+
+      uint8_t init_state = 1;
+      char init_message[7][sizeof(notify_pack)];
+
+      int ret;
+      threadInfo *ppthread_info = (threadInfo *)pthread_inf;
+      /*******Initialize Notification  Message Que*****************/
+      mqd_t notify_msgq;
+      int msg_prio_err = MSG_PRIO_ERR;
+      int num_bytes_err;
+      struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                      .mq_msgsize =
+                                          BUF_SIZE, // max size of msg in bytes
+                                      .mq_flags = 0};
+
+      notify_msgq =
+          mq_open(NOTIFY_MQ,        // name
+                  O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+                  S_IRWXU,          // mode-read,write and execute permission
+                  &msgq_attr_err);  // attribute
+      sprintf(&(init_message[0][0]), "SocketTask-mq_open-notify mq %s\n",
+              strerror(errno));
+      if (notify_msgq < 0)
+        init_state = 0;
+
+      /*******Initialize Logger Message Que*****************/
+      mqd_t logger_msgq;
+      int msg_prio = MSG_PRIO;
+      int num_bytes;
+      char message[BUF_SIZE];
+      struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                  .mq_msgsize =
+                                      BUF_SIZE, // max size of msg in bytes
+                                  .mq_flags = 0};
+
+      logger_msgq =
+          mq_open(LOGGER_MQ,        // name
+                  O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+                  S_IRWXU,          // mode-read,write and execute permission
+                  &msgq_attr);      // attribute
+      sprintf(&(init_message[1][0]), "SocketTask-mq_open-logger mq %s\n",
+              strerror(errno));
+      if (logger_msgq < 0)
+        init_state = 0;
+
+      /*************Sockets*****************************/
+      // user defined data structures for data read and write
+      sock_req *request = (sock_req *)malloc(sizeof(sock_req));
+      if (request == NULL) {
+        printf("malloc Error: %s\n", strerror(errno));
+        return NULL;
+      }
+
+      log_pack *response = (log_pack *)malloc(sizeof(log_pack));
+      if (response == NULL) {
+        printf("malloc Error: %s\n", strerror(errno));
+        return NULL;
+      }
+
+      int sockfd;                     // listening FD
+      int newsockfd;                  // Client connected FD
+      int num_char;                   // No. of characters red/written
+      struct sockaddr_in server_addr; // structure containing internet addresss.
+
+      int opt = 1;
+      /****Create a new socket*******/
+      sockfd = socket(AF_INET,                     // com domain - IPv4
+                      SOCK_STREAM | SOCK_NONBLOCK, // com type - TCP
+                      0);                          // protocol
+      sprintf(&(init_message[2][0]), "SocketTask-socket %s\n", strerror(errno));
+      if (sockfd < 0)
+        init_state = 0;
+
+      /*****set options for the socket***********/
+      ret = setsockopt(sockfd,
+                       SOL_SOCKET, // Socket Level Protocol
+                       SO_REUSEADDR | SO_REUSEPORT,
+                       &opt, // option is enabled
+                       sizeof(opt));
+      sprintf(&(init_message[3][0]), "SocketTask-setsockopt %s\n", strerror(errno));
+      if (ret < 0)
+        init_state = 0;
+      /***initialize the address structure and bind socket ****/
+      bzero((char *)&server_addr, sizeof(server_addr)); // sets all val to 0
+      server_addr.sin_family = AF_INET;
+      server_addr.sin_addr.s_addr = INADDR_ANY;
+      server_addr.sin_port = htons(PORT);
+      ret = bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+      sprintf(&(init_message[4][0]), "SocketTask-bind %s\n", strerror(errno));
+      if (ret < 0)
+        init_state = 0;
+
+      /**listen on socket for connections**/
+      ret = listen(sockfd, 5);
+      sprintf(&(init_message[6][0]), "SocketTask-listen %s\n", strerror(errno));
+      if (ret < 0)
+        init_state = 0;
+
+      /*****************Mask SIGNALS********************/
+      sigset_t mask; // set of signals
+      sigemptyset(&mask);
+      sigaddset(&mask, SIGTEMP);
+      sigaddset(&mask, SIGTEMP_HB);
+      sigaddset(&mask, SIGLIGHT_HB);
+      sigaddset(&mask, SIGLIGHT);
+      sigaddset(&mask, SIGLOG_HB);
+      sigaddset(&mask, SIGLOG);
+      sigaddset(&mask, SIGTEMP_IPC);
+      sigaddset(&mask, SIGLIGHT_IPC);
+
+      ret =
+          pthread_sigmask(SIG_SETMASK, // block the signals in the set argument
+                          &mask,       // set argument has list of blocked signals
+                          NULL); // if non NULL prev val of signal mask stored here
+      sprintf(&(init_message[5][0]), "SocketTask-pthread_sigmask %s\n",
+              strerror(errno));
+      if (ret < 0)
+        init_state = 0;
+
+      notify(&init_message[0][0], notify_msgq, logger_msgq, init);
+      notify(&init_message[1][0], notify_msgq, logger_msgq, init);
+      notify(&init_message[2][0], notify_msgq, logger_msgq, init);
+      notify(&init_message[3][0], notify_msgq, logger_msgq, init);
+      notify(&init_message[4][0], notify_msgq, logger_msgq, init);
+      notify(&init_message[5][0], notify_msgq, logger_msgq, init);
+      notify(&init_message[6][0], notify_msgq, logger_msgq, init);
+
+      if (init_state == 0) {
+        notify("##All elements not initialized in Socket Task, Not proceeding with "
+               "it##\n",
+               notify_msgq, logger_msgq, error);
+        while (gclose_socket & gclose_app) {
+          sleep(1);
+        };
+        free(request);
+        free(response);
+        return NULL;
+      }
+
+      else if (init_state == 1)
+        notify("##All elements initialized in Socket Task, proceeding with it##\n",
+               notify_msgq, logger_msgq, init);
+
+    #ifdef BBB
+      int temp_handle = initializeTemp(); // Get the Handler
+      char temp_data[2], data_cel_str[BUF_SIZE - 200];
+      float data_cel;
+
+      int light_handle = initializeLight(); // Get the handler
+      char lightbuffer[1];
+      commandReg(light_handle, CONTROL, WRITE);
+      controlReg(light_handle, WRITE, ENABLE, lightbuffer);
+      float lumen;
+      char data_lumen_str[BUF_SIZE - 200];
+      uint16_t ch0, ch1;
+
+    #endif
+
+      /****block until the client connects to the server and gets its address*****/
+      struct sockaddr_in client_addr;
+      socklen_t addrlen = sizeof(client_addr); // size of address of client
+
+      // keep doing this repeatedly
+      while (gclose_socket & gclose_app) {
+        pthread_kill(ppthread_info->main, SIGSOCKET_HB); // send HB
+
+        while (1) {
+          if ((gclose_socket & gclose_app) == 0)
+            break;
+
+          newsockfd = accept(sockfd, (struct sockaddr *)&client_addr,
+                             (socklen_t *)&addrlen);
+          if ((newsockfd > 0))
+            break;
+          else
+            sleep(1);
+          // send HB to main
+          pthread_kill(ppthread_info->main, SIGSOCKET_HB); // send HB
+        }
+        if ((gclose_socket & gclose_app) == 0)
+          break;
+
+        /*****beyond this, execution happens only after client is connected******/
+        // prepopulate static elements of response packet
+        response->log_source = RemoteRequestSocket_Task;
+        response->log_level = 3;
+
+        /****read from the client and write to it*******/
+
+        bzero(request, sizeof(sock_req));
+
+        num_char = read(newsockfd, (char *)request, sizeof(sock_req));
+        if (num_char < 0) {
+          notify("Socket Task read error", notify_msgq, logger_msgq, error);
+          break;
+        }
+
+        // find the sensor requested to to probe and probe the sensor
+        time_t t = time(NULL);
+        struct tm *tm = localtime(&t);
+        strcpy(response->time_stamp, asctime(tm));
+
+    // collect data and populate the log packet
+    #ifdef BBB
+        if (request->sensor == temp) {
+
+          temperatureRead(temp_handle, temp_data);
+          if (request->tunit == CELCIUS) {
+            data_cel = temperatureConv(CELCIUS, temp_data);
+          }
+          if (request->tunit == FARENHEIT) {
+            data_cel = temperatureConv(FARENHEIT, temp_data);
+          }
+          if (request->tunit == KELVIN) {
+            data_cel = temperatureConv(KELVIN, temp_data);
+          }
+          sprintf(data_cel_str, "temperature %f", data_cel);
+          strcpy(response->log_msg, data_cel_str);
+        }
+        if (request->sensor == light) {
+          if (request->lunit == LUMEN) {
+            ch0 = adcDataRead(light_handle, 0);
+            ch1 = adcDataRead(light_handle, 1);
+            lumen = reportLumen(ch0, ch1);
+            sprintf(data_lumen_str, "lumen %f", lumen);
+            strcpy(response->log_msg, data_lumen_str);
+          }
+          if (request->lunit == DAY_NIGHT) {
+            int r = reportStatus(light_handle);
+            if (r == DAY)
+              strcpy(response->log_msg, "DAY");
+            else if (r == NIGHT)
+              strcpy(response->log_msg, "NIGHT");
+          }
+        }
+
+    #else
+        if (request->sensor == temp) {
+          strcpy(response->log_msg, "TEMP");
+        }
+        if (request->sensor == light) {
+          strcpy(response->log_msg, "LIGHT");
+        }
+    #endif
+        // send the read data
+        num_char = write(newsockfd, response, sizeof(log_pack));
+        if (num_char < 0) {
+          notify("Socket Task write error", notify_msgq, logger_msgq, error);
+          break;
+        }
+
+        //                sleep(2);
+      }
+      printf("Exiting Socket Task\n");
+      free(request);
+      free(response);
+
+      return NULL;
+    }
+
+      strcpy(response->log_msg, "TEMP");
+    }
+    if (request->sensor == light) {
+      strcpy(response->log_msg, "LIGHT");
+    }
+#endif
+    // send the read data
+    num_char = write(newsockfd, response, sizeof(log_pack));
+    if (num_char < 0) {
+      notify("Socket Task write error", notify_msgq, logger_msgq, error);
+      break;
+    }
+
+    //                sleep(2);
+  }
+  printf("Exiting Socket Task\n");
+  free(request);
+  free(response);
+
+  return NULL;
+}
+/*******************************************************************************
+   @Filename:tempTask.c
+   @Brief:Implements Temp Task
+   @Author:Ravi Dubey
+   @Date:3/12/2018
+ ******************************************************************************/
+#include "./sensors/tmp102Sensor.h"
+#include "includes.h"
+#include "messageQue.h"
+#include "notification.h"
+#include "signals.h"
+#include "threads.h"
+#include <errno.h>
+#include <mqueue.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+// #define TEMP_THIGH_VAL 	(0x15)
+// #define TEMP_TLOW_VAL 	(0x10)
+// #define TEMP_CONFIG_VAL (0x60)
+
+#define GET_TIME                                                               \
+  clock_gettime(CLOCK_MONOTONIC, &now);                                        \
+  expire.tv_sec = now.tv_sec + 2;                                              \
+  expire.tv_nsec = now.tv_nsec;
+
+void *tempTask(void *pthread_inf) {
+
+  uint8_t init_state = 1;
+  char init_message[8][sizeof(notify_pack)];
+  temp_IPC_flag = 0;
+  int ret;
+  threadInfo *ppthread_info = (threadInfo *)pthread_inf;
+
+  /*******Initialize ERROR Message Que*****************/
+  mqd_t notify_msgq;
+  int msg_prio_err = MSG_PRIO_ERR;
+  int num_bytes_err;
+  struct mq_attr msgq_attr_err = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                  .mq_msgsize =
+                                      BUF_SIZE, // max size of msg in bytes
+                                  .mq_flags = 0};
+
+  notify_msgq =
+      mq_open(NOTIFY_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr_err);  // attribute
+
+  if (notify_msgq < 0) {
+    init_state = 0;
+    sprintf(&(init_message[0][0]), "Temp Task mq_open-notify_mq  %s\n",
+            strerror(errno));
+  } else {
+    sprintf(&(init_message[0][0]), "Temp Task mq_open-notify_mq %s\n",
+            strerror(errno));
+  }
+
+  /******set periodic timer**************/
+  ret = setTempTimer(); // sets up timer to periodically signal and wake this
+                        // thread
+  if (ret == -1) {
+    init_state = 0;
+    sprintf(&(init_message[1][0]), "Temptask-setTempTimer Error\n");
+  } else {
+    sprintf(&(init_message[1][0]), "Temptask-setTempTimer Success\n");
+  }
+
+  ret = pthread_mutex_init(&gtemp_mutex, NULL);
+  if (ret == -1) {
+    init_state = 0;
+    sprintf(&(init_message[2][0]), "Temptask-pthread_mutex_init %s\n",
+            strerror(errno));
+  } else {
+    sprintf(&(init_message[2][0]), "Temptask-pthread_mutex_init:%s\n",
+            strerror(errno));
+  }
+  /*******Initialize Logger Message Que*****************/
+  mqd_t logger_msgq;
+  int msg_prio = 30;
+  int num_bytes;
+  char message[BUF_SIZE];
+  struct mq_attr msgq_attr = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                              .mq_msgsize =
+                                  BUF_SIZE, // max size of msg in bytes
+                              .mq_flags = 0};
+
+  logger_msgq =
+      mq_open(LOGGER_MQ,        // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &msgq_attr);      // attribute
+
+  if (logger_msgq < 0) {
+    init_state = 0;
+    sprintf(&(init_message[3][0]), "Temp Task-mq_open-loggerQ %s\n",
+            strerror(errno));
+  } else {
+    sprintf(&(init_message[3][0]), "Temp Task-mq_open-loggerQ %s\n",
+            strerror(errno));
+  }
+  /***************setting logger_msgq for IPC data Request******************/
+  mqd_t IPCmsgq;
+  int IPCmsg_prio = 20;
+  int IPCnum_bytes;
+  char IPCmessage[BUF_SIZE];
+
+  struct mq_attr IPCmsgq_attr = {.mq_maxmsg = MQ_MAXMSG, // max # msg in queue
+                                 .mq_msgsize =
+                                     BUF_SIZE, // max size of msg in bytes
+                                 .mq_flags = 0};
+
+  IPCmsgq =
+      mq_open(IPC_TEMP_MQ,      // name
+              O_CREAT | O_RDWR, // flags. create a new if dosent already exist
+              S_IRWXU,          // mode-read,write and execute permission
+              &IPCmsgq_attr);   // attribute
+  if (IPCmsgq < 0) {
+    init_state = 0;
+    sprintf(&(init_message[4][0]), "Temptask-mq_open-IPCQ %s\n",
+            strerror(errno));
+  } else {
+    sprintf(&(init_message[4][0]), "Temptask-mq_open-IPCQ %s\n",
+            strerror(errno));
+  }
+  // set up the signal to request data
+  struct sigaction action;
+  sigemptyset(&action.sa_mask);
+  action.sa_handler = TemptIPChandler;
+  ret = sigaction(SIGTEMP_IPC, &action, NULL);
+
+  if (ret == -1) {
+    init_state = 0;
+    sprintf(&(init_message[5][0]), "Temp Task sigaction %s\n", strerror(errno));
+  } else {
+    sprintf(&(init_message[5][0]), "Temp task sigaction %s\n", strerror(errno));
+  }
+
+/************Initialize temperatue sensor******************/
+#ifdef BBB
+  int temp = initializeTemp();
+  char temp_data[2], data_cel_str[BUF_SIZE - 200];
+  float data_cel;
+
+  if (temp == -1) {
+    init_state = 0;
+    sprintf(&(init_message[6][0]), "Temp Sensor init Error\n");
+  } else {
+    sprintf(&(init_message[6][0]), "Temp Sensor init Success\n");
+  }
+#endif
+
+  /*****************Mask SIGNALS********************/
+  sigset_t mask; // set of signals
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGLIGHT);
+  sigaddset(&mask, SIGLIGHT_HB);
+  sigaddset(&mask, SIGLOG_HB);
+  sigaddset(&mask, SIGTEMP_HB);
+  sigaddset(&mask, SIGLOG);
+  sigaddset(&mask, SIGCONT);
+  sigaddset(&mask, SIGSOCKET_HB);
+
+  ret =
+      pthread_sigmask(SIG_SETMASK, // block the signals in the set argument
+                      &mask,       // set argument has list of blocked signals
+                      NULL); // if non NULL prev val of signal mask stored here
+  if (ret == -1) {
+    init_state = 0;
+    sprintf(&(init_message[7][0]), "Temp task-pthread_sigmask %s\n",
+            strerror(errno));
+  } else {
+    sprintf(&(init_message[7][0]), "Temp task-pthread_sigmask %s\n",
+            strerror(errno));
+  }
+
+  // send initialization status
+  notify(&init_message[0][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[1][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[2][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[3][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[4][0], notify_msgq, logger_msgq, init);
+#ifdef BBB
+  notify(&init_message[5][0], notify_msgq, logger_msgq, init);
+#endif
+  notify(&init_message[6][0], notify_msgq, logger_msgq, init);
+  notify(&init_message[7][0], notify_msgq, logger_msgq, init);
+
+  if (init_state == 0) {
+    notify("##All elements not initialized in Temp Task, Not proceeding with "
+           "it##\n",
+           notify_msgq, logger_msgq, error);
+    while (gclose_temp & gclose_app) {
+      sleep(1);
+    };
+    return NULL;
+  }
+
+  else if (init_state == 1)
+    notify("##All elements initialized in Temp Task, proceeding with it##\n",
+           notify_msgq, logger_msgq, init);
+
+  /************Creating logpacket*******************/
+  log_pack temp_log = {.log_level = 1, .log_source = temperatue_Task};
+  struct timespec now, expire;
+
+  sleep(1);
+
+#ifdef BBB
+/*****Logging BBB configurations*******/
+#ifdef REG_MANIPULATE
+  char buffer[2];
+
+  buffer[0] = TEMP_TLOW_VAL_B1;
+  buffer[1] = TEMP_TLOW_VAL_B2;
+  tlowWrite(temp, buffer);
+  buffer[0] = buffer[1] = 0;
+  tlowRead(temp, buffer);
+  printf("Temp Sensor TLOW Read %x %x \n", buffer[0], buffer[1]);
+
+  float val = temperatureConv(CELCIUS, buffer);
+  printf("Temp Sensor TLOW Read in cecius %f\n", val);
+
+  buffer[0] = TEMP_THIGH_VAL_B1;
+  buffer[1] = TEMP_THIGH_VAL_B2;
+  thighWrite(temp, buffer);
+  buffer[0] = buffer[1] = 0;
+  thighRead(temp, buffer);
+  printf("Temp Sensor THIGH Read %x %x \n", buffer[0], buffer[1]);
+  val = temperatureConv(CELCIUS, buffer);
+  printf("Temp Sensor THIGH Read Celcius %f \n", val);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register Default Val %x %x \n", buffer[0], buffer[1]);
+
+  buffer[0] |= SHUTDOWN_EN;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register Val after shutdown Enable %x %x \n", buffer[0],
+         buffer[1]);
+
+  buffer[0] &= SHUTDOWN_DI;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after shutdown disable %x %x \n", buffer[0],
+         buffer[1]);
+
+  buffer[1] |= EMMODE_EN;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after setting EM mode %x %x \n", buffer[0],
+         buffer[1]);
+
+  buffer[1] &= EMMODE_DI;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after disabling EM mode %x %x \n", buffer[0],
+         buffer[1]);
+
+  buffer[1] |= CONVRATE3;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after setting conversion rate to 8 HZ %x %x \n",
+         buffer[0], buffer[1]);
+
+  buffer[0] |= TM_EN;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register val after setting interrupt mode %x %x \n", buffer[0],
+         buffer[1]);
+
+#endif
+
+#endif
+
+  /****************Do this periodically*******************************/
+  while (gclose_temp & gclose_app) {
+#ifdef BBB
+    INTR_LED_OFF;
+#endif
+    // wait for next second
+    pthread_mutex_lock(&gtemp_mutex);
+    while (gtemp_flag == 0) {
+      pthread_cond_wait(&gtemp_condition, &gtemp_mutex);
+    }
+
+    pthread_mutex_unlock(&gtemp_mutex);
+    gtemp_flag = 0;
+    // send HB
+    pthread_kill(ppthread_info->main, SIGTEMP_HB);
+// collect temperatue
+#ifdef BBB
+    temperatureRead(temp, temp_data);
+    data_cel = temperatureConv(temp_format, temp_data);
+
+    /************populate the log packet*********/
+    sprintf(data_cel_str, "temperature %f", data_cel);
+    strcpy(temp_log.log_msg, data_cel_str);
+#else
+    strcpy(temp_log.log_msg, "Mock temp");
+
+#endif
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    strcpy(temp_log.time_stamp, asctime(tm));
+
+    /*******Log messages on Que*************/
+    // set up time for timed send
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    expire.tv_sec = now.tv_sec + 2;
+    expire.tv_nsec = now.tv_nsec;
+    num_bytes = mq_timedsend(logger_msgq, (const char *)&temp_log,
+                             sizeof(log_pack), msg_prio, &expire);
+    if (num_bytes < 0) {
+      notify("mq_send to Log Q in tempTask", notify_msgq, logger_msgq, error);
+    }
+    /******Log data on IPC Que if requested******/
+
+    if (temp_IPC_flag == 1) {
+      temp_IPC_flag = 0;
+      // set up time for timed send
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      expire.tv_sec = now.tv_sec + 2;
+      expire.tv_nsec = now.tv_nsec;
+      num_bytes = mq_timedsend(IPCmsgq, (const char *)&temp_log,
+                               sizeof(log_pack), IPCmsg_prio, &expire);
+      if (num_bytes < 0) {
+        notify("mq_send-IPC Q-tempTask Error", notify_msgq, logger_msgq, error);
+      }
+    }
+    // printf("hi\n");
+    //  notify("Test Error",notify_msgq,logger_msgq,error);
+  }
+  printf("exiting Temp task\n");
+  mq_close(logger_msgq);
+  mq_close(notify_msgq);
+  mq_close(IPCmsgq);
+
+  return NULL;
+}
+/*******************************************************************************
+   @Filename:threads.h
+   @Brief:common declaration for threads
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#ifndef THREAH_H
+#define THREAD_H
+
+#include <signal.h>
+#include <unistd.h>
+
+#define DEFAULT_THREAD_ATTR ((void *)0)
+
+pthread_mutex_t gtemp_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t gtemp_condition;
+sig_atomic_t gtemp_flag;
+
+pthread_mutex_t glight_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t glight_condition;
+sig_atomic_t glight_flag;
+
+/**
+*structure to pass arguments and data to thread function
+*/
+typedef struct
+{
+        int thread_id;
+        char* plog_file;
+        pthread_t main;
+} threadInfo;
+
+/**
+*@brief:Implements Light Task
+*Wakes up periodically to read light data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *lightTask(void *pthread_inf);
+
+/**
+*@brief:Implements Temp Task
+*Wakes up periodically to read temp data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *tempTask(void *pthread_inf);
+
+/**
+*@brief:Implements log Task
+*Requests and receives logs from other tasks and writes them synchronously on file
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *logTask(void *pthread_inf);
+
+/**
+*@brief:Implements socketTask
+*Receives socket requests,based on the request probes the light or temp sensor for data *and sends it back to the requestee.
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *socketTask(void *pthread_inf);
+
+#endif
+/*******************************************************************************
+   @Filename:threads.h
+   @Brief:common declaration for threads
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#ifndef THREAH_H
+#define THREAD_H
+
+#include <signal.h>
+#include <unistd.h>
+
+#define DEFAULT_THREAD_ATTR ((void *)0)
+
+pthread_mutex_t gtemp_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t gtemp_condition;
+sig_atomic_t gtemp_flag;
+
+pthread_mutex_t glight_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t glight_condition;
+sig_atomic_t glight_flag;
+
+/**
+*structure to pass arguments and data to thread function
+*/
+typedef struct
+{
+        int thread_id;
+        char* plog_file;
+        pthread_t main;
+} threadInfo;
+
+/**
+*@brief:Implements Light Task
+*Wakes up periodically to read light data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *lightTask(void *pthread_inf);
+
+/**
+*@brief:Implements Temp Task
+*Wakes up periodically to read temp data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *tempTask(void *pthread_inf);
+
+/**
+*@brief:Implements log Task
+*Requests and receives logs from other tasks and writes them synchronously on file
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *logTask(void *pthread_inf);
+
+/**
+*@brief:Implements socketTask
+*Receives socket requests,based on the request probes the light or temp sensor for data *and sends it back to the requestee.
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *socketTask(void *pthread_inf);
+
+#endif
+/*******************************************************************************
+   @Filename:threads.h
+   @Brief:common declaration for threads
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#ifndef THREAH_H
+#define THREAD_H
+
+#include <signal.h>
+#include <unistd.h>
+
+#define DEFAULT_THREAD_ATTR ((void *)0)
+
+pthread_mutex_t gtemp_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t gtemp_condition;
+sig_atomic_t gtemp_flag;
+
+pthread_mutex_t glight_mutex ;//= PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t glight_condition;
+sig_atomic_t glight_flag;
+
+/**
+*structure to pass arguments and data to thread function
+*/
+typedef struct
+{
+        int thread_id;
+        char* plog_file;
+        pthread_t main;
+} threadInfo;
+
+/**
+*@brief:Implements Light Task
+*Wakes up periodically to read light data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *lightTask(void *pthread_inf);
+
+/**
+*@brief:Implements Temp Task
+*Wakes up periodically to read temp data from light sensor via I2c,sends data *to Logger, sends HB to main and handles IPC socket requests
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *tempTask(void *pthread_inf);
+
+/**
+*@brief:Implements log Task
+*Requests and receives logs from other tasks and writes them synchronously on file
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *logTask(void *pthread_inf);
+
+/**
+*@brief:Implements socketTask
+*Receives socket requests,based on the request probes the light or temp sensor for data *and sends it back to the requestee.
+*@param:pointer to thread info structure
+*@return: returns NULL pointer
+*/
+void *socketTask(void *pthread_inf);
+
+#endif
+/*******************************************************************************
+   @Filename:i2cWrappper.c
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+/****Reference:
+ * https://www.kernel.org/doc/Documentation/i2c/dev-interface******/
+
+#include "../includes.h"
+#include "i2cWrappper.h"
+#include <pthread.h>
+
+int i2cInit(char *dev_path, int i2c_file_handler, int slave_addr) {
+  int rc, ret;
+  char test_buf[1];
+  pthread_mutex_lock(&i2c_mutex);
+
+  i2c_file_handler = open(dev_path, O_RDWR);
+
+  if (i2c_file_handler < 0) {
+    err(errno, "Tried to open '%s'", dev_path);
+    ret = -1;
+  } else
+    ret = i2c_file_handler;
+
+  rc = ioctl(i2c_file_handler, I2C_SLAVE, slave_addr);
+  if (rc < 0) {
+    err(errno, "Tried to set device address '0x%02x'", slave_addr);
+    ret = -1;
+  }
+  if (read(i2c_file_handler, test_buf, 1) != 1) {
+    ret = -1;
+  }
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+
+int i2cRead(int i2c_file_handler, char *buffer, int num_bytes) {
+  int ret;
+  pthread_mutex_lock(&i2c_mutex);
+  if (read(i2c_file_handler, buffer, num_bytes) != num_bytes)
+    ret = -1;
+  else
+    ret = 0;
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+
+int i2cWrite(int i2c_file_handler, char *buffer, int num_bytes) {
+  int ret;
+  pthread_mutex_lock(&i2c_mutex);
+  if (write(i2c_file_handler, buffer, num_bytes) != num_bytes)
+    ret = -1;
+  else
+    ret = 0;
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+/*******************************************************************************
+   @Filename:i2cWrappper.c
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+/****Reference:
+ * https://www.kernel.org/doc/Documentation/i2c/dev-interface******/
+
+#include "../includes.h"
+#include "i2cWrappper.h"
+#include <pthread.h>
+
+int i2cInit(char *dev_path, int i2c_file_handler, int slave_addr) {
+  int rc, ret;
+  char test_buf[1];
+  pthread_mutex_lock(&i2c_mutex);
+
+  i2c_file_handler = open(dev_path, O_RDWR);
+
+  if (i2c_file_handler < 0) {
+    err(errno, "Tried to open '%s'", dev_path);
+    ret = -1;
+  } else
+    ret = i2c_file_handler;
+
+  rc = ioctl(i2c_file_handler, I2C_SLAVE, slave_addr);
+  if (rc < 0) {
+    err(errno, "Tried to set device address '0x%02x'", slave_addr);
+    ret = -1;
+  }
+  if (read(i2c_file_handler, test_buf, 1) != 1) {
+    ret = -1;
+  }
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+
+int i2cRead(int i2c_file_handler, char *buffer, int num_bytes) {
+  int ret;
+  pthread_mutex_lock(&i2c_mutex);
+  if (read(i2c_file_handler, buffer, num_bytes) != num_bytes)
+    ret = -1;
+  else
+    ret = 0;
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+
+int i2cWrite(int i2c_file_handler, char *buffer, int num_bytes) {
+  int ret;
+  pthread_mutex_lock(&i2c_mutex);
+  if (write(i2c_file_handler, buffer, num_bytes) != num_bytes)
+    ret = -1;
+  else
+    ret = 0;
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}/*******************************************************************************
+   @Filename:i2cWrappper.c
+   @Brief:
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+/****Reference:
+ * https://www.kernel.org/doc/Documentation/i2c/dev-interface******/
+
+#include "../includes.h"
+#include "i2cWrappper.h"
+#include <pthread.h>
+
+int i2cInit(char *dev_path, int i2c_file_handler, int slave_addr) {
+  int rc, ret;
+  char test_buf[1];
+  pthread_mutex_lock(&i2c_mutex);
+
+  i2c_file_handler = open(dev_path, O_RDWR);
+
+  if (i2c_file_handler < 0) {
+    err(errno, "Tried to open '%s'", dev_path);
+    ret = -1;
+  } else
+    ret = i2c_file_handler;
+
+  rc = ioctl(i2c_file_handler, I2C_SLAVE, slave_addr);
+  if (rc < 0) {
+    err(errno, "Tried to set device address '0x%02x'", slave_addr);
+    ret = -1;
+  }
+  if (read(i2c_file_handler, test_buf, 1) != 1) {
+    ret = -1;
+  }
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+
+int i2cRead(int i2c_file_handler, char *buffer, int num_bytes) {
+  int ret;
+  pthread_mutex_lock(&i2c_mutex);
+  if (read(i2c_file_handler, buffer, num_bytes) != num_bytes)
+    ret = -1;
+  else
+    ret = 0;
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+
+int i2cWrite(int i2c_file_handler, char *buffer, int num_bytes) {
+  int ret;
+  pthread_mutex_lock(&i2c_mutex);
+  if (write(i2c_file_handler, buffer, num_bytes) != num_bytes)
+    ret = -1;
+  else
+    ret = 0;
+  pthread_mutex_unlock(&i2c_mutex);
+  return ret;
+}
+/*******************************************************************************
+   @Filename:tmp102Sensor.c
+   @Brief: i2c wrappers for temperature sensor functions
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+#include "tmp102Sensor.h"
+#include <pthread.h>
+
+void tlowRead(int i2c_file_handler, char *buffer) {
+  char P1P0 = TEMP_TLOW_REG;
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(i2c_file_handler, &P1P0, 1);
+  i2cRead(i2c_file_handler, buffer, 2);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+void thighRead(int i2c_file_handler, char *buffer) {
+  char P1P0 = TEMP_THIGH_REG;
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(i2c_file_handler, &P1P0, 1);
+  i2cRead(i2c_file_handler, buffer, 2);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+void tlowWrite(int i2c_file_handler, char *buffer) {
+  char send[3];
+  send[0] = TEMP_TLOW_REG;
+  send[1] = buffer[0];
+  send[2] = buffer[1];
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(i2c_file_handler, send, 3);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+void thighWrite(int i2c_file_handler, char *buffer) {
+  char send[3];
+  send[0] = TEMP_THIGH_REG;
+  send[1] = buffer[0];
+  send[2] = buffer[1];
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(i2c_file_handler, send, 3);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+void temperatureRead(int i2c_file_handler, char *buffer) {
+  char P1P0 = TEMP_READ_REG;
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(i2c_file_handler, &P1P0, 1);
+  i2cRead(i2c_file_handler, buffer, 2);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+int initializeTemp() {
+  int temp;
+  pthread_mutex_lock(&temp_i2c_mutex);
+  temp = i2cInit("/dev/i2c-2", temp, TEMP_ADDR);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+  return temp;
+}
+
+void configRegWrite(int i2c_file_handler, char *buffer) {
+  char send[3];
+  send[0] = TEMP_CONFIG_REG;
+  send[1] = buffer[0];
+  send[2] = buffer[1];
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(i2c_file_handler, send, 3);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+void configRegRead(int file_handler, char *buffer) {
+  char P1P0 = TEMP_CONFIG_REG;
+  pthread_mutex_lock(&temp_i2c_mutex);
+  i2cWrite(file_handler, &P1P0, 1);
+  i2cRead(file_handler, buffer, 2);
+  pthread_mutex_unlock(&temp_i2c_mutex);
+}
+
+float temperatureConv(temp_unit unit, char *buffer) {
+  float temperature;
+  unsigned char MSB, LSB;
+  int temp_12b;
+  // Reference: http://bildr.org/2011/01/tmp102-arduino
+  MSB = buffer[0];
+  LSB = buffer[1];
+  // 12 bit result
+  temp_12b = ((MSB << 8) | LSB);
+  int negative = temp_12b & 0x8000;
+  float multiplier = 0.0625;
+  temp_12b = temp_12b >> 4;
+  if (negative == 0x8000) {
+    temp_12b = 0x0FFF - (temp_12b - 1);
+    multiplier = -0.0625;
+  }
+  switch (unit) {
+  case CELCIUS:
+    temperature = temp_12b * multiplier;
+    break;
+
+  case FARENHEIT:
+    temperature = 1.8 * (temp_12b * multiplier) + 32;
+    break;
+
+  case KELVIN:
+    temperature = 273.15 + (temp_12b * multiplier);
+    break;
+
+  default:
+    temperature = temp_12b * multiplier;
+  }
+  return temperature;
+}
+
+/*******************************************************************************
+   @Filename:tests.c
+   @Brief:declarations for cmocka tests
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+
+#include "/home/ravi/cmocka/include/cmocka.h"
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "../sensors/adps9301Sensor.h"
+#include "../sensors/tmp102Sensor.h"
+#include "../socket_client/client_test.h"
+
+void positive_temp_conv_test(void **state) {
+  char buffer[2];
+
+  // mock data
+  buffer[0] = 0x19;
+  buffer[1] = 0x00;
+
+  float expected = 25.0;
+  printf("Testing C,F,K conversion\n");
+  float result = temperatureConv(CELCIUS, buffer);
+  assert_int_equal((int)expected, (int)result);
+
+  expected = 77.0;
+  result = temperatureConv(FARENHEIT, buffer);
+  assert_int_equal((int)expected, (int)result);
+
+  expected = 298.15;
+  result = temperatureConv(KELVIN, buffer);
+  assert_int_equal((int)expected, (int)result);
+}
+
+void negative_temp_conv_test(void **state) {
+  char buffer[2];
+
+  // mock data
+  buffer[0] = 0xE7;
+  buffer[1] = 0x01;
+
+  float expected = -25.0;
+  printf("Testing C,F,K conversion\n");
+  float result = temperatureConv(CELCIUS, buffer);
+  assert_int_equal((int)expected, (int)result);
+
+  expected = -13.0;
+  result = temperatureConv(FARENHEIT, buffer);
+  assert_int_equal((int)expected, (int)result);
+
+  expected = 248.15;
+  result = temperatureConv(KELVIN, buffer);
+  assert_int_equal((int)expected, (int)result);
+}
+
+void light_conv_test(void **state) {
+  uint16_t adc_data_ch0, adc_data_ch1;
+
+  // mock data
+  adc_data_ch0 = 9669;
+  adc_data_ch1 = 973;
+
+  float expected = 269;
+  float result = reportLumen(adc_data_ch0, adc_data_ch1);
+  assert_int_equal((int)expected, (int)result);
+}
+
+void socket_task_test(void **state) {
+  //  int expected = 1;
+  char buffer[4] = "Test";
+  test_client_data(buffer, 1);
+  assert_string_equal("TEMP", buffer);
+}
+
+int main(void) {
+  const struct CMUnitTest tests[] = {cmocka_unit_test(positive_temp_conv_test),
+                                     cmocka_unit_test(negative_temp_conv_test),
+                                     cmocka_unit_test(light_conv_test),
+                                     cmocka_unit_test(socket_task_test)
+
+  };
+
+  return cmocka_run_group_tests(tests, NULL, NULL);
+}
+/*******************************************************************************
+   @Filename:client_test.c
+   @Brief:function for cmocka test of socket task
+   @Author:Ravi Dubey
+   @Date:3/14/2018
+ ******************************************************************************/
+
+#include "../includes.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <mqueue.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "client_test.h"
+
+// int test_client_data(char* buf, int choice){
+//
+//
+//
+// }
+
+int test_client_data(char *buf, int choice) {
+
+  int shmem_fd; /*shared memory file desxriptor*/
+  void *pshmem_obj;
+  const char name[] = "OS";
+
+  shmem_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+  if (shmem_fd == -1)
+    perror("shm_open");
+  ftruncate(shmem_fd, TEST_SIZE);
+
+  pshmem_obj =
+      mmap(0, BUF_SIZE, PROT_WRITE | PROT_READ, MAP_SHARED, shmem_fd, 0);
+  if (pshmem_obj == NULL)
+    perror("mmap");
+
+  if (choice == 0) { // write
+    if (memcpy((void *)pshmem_obj, (const void *)buf, TEST_SIZE) == NULL)
+      perror("memcpy");
+    printf("written %s\n", buf);
+    return 1;
+  }
+
+  if (choice == 1) { // read
+    bzero(buf, TEST_SIZE);
+    if (memcpy(buf, pshmem_obj, TEST_SIZE) == NULL)
+      perror("memcpy");
+    //`` printf("read %s\n", buf);
+    shm_unlink(name);
+    return 1;
+  }
+}
