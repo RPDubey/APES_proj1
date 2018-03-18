@@ -19,6 +19,10 @@
 #include <time.h>
 #include <unistd.h>
 
+// #define TEMP_THIGH_VAL 	(0x15)
+// #define TEMP_TLOW_VAL 	(0x10)
+// #define TEMP_CONFIG_VAL (0x60)
+
 #define GET_TIME                                                               \
   clock_gettime(CLOCK_MONOTONIC, &now);                                        \
   expire.tv_sec = now.tv_sec + 2;                                              \
@@ -204,51 +208,83 @@ void *tempTask(void *pthread_inf) {
   log_pack temp_log = {.log_level = 1, .log_source = temperatue_Task};
   struct timespec now, expire;
 
+  sleep(1);
+
 #ifdef BBB
 /*****Logging BBB configurations*******/
 #ifdef REG_MANIPULATE
-  char buffer[3];
+  char buffer[2];
 
+  buffer[0] = TEMP_TLOW_VAL_B1;
+  buffer[1] = TEMP_TLOW_VAL_B2;
+  tlowWrite(temp, buffer);
+  buffer[0] = buffer[1] = 0;
   tlowRead(temp, buffer);
   printf("Temp Sensor TLOW Read %x %x \n", buffer[0], buffer[1]);
 
+  float val = temperatureConv(CELCIUS, buffer);
+  printf("Temp Sensor TLOW Read in cecius %f\n", val);
+
+  buffer[0] = TEMP_THIGH_VAL_B1;
+  buffer[1] = TEMP_THIGH_VAL_B2;
   thighWrite(temp, buffer);
   buffer[0] = buffer[1] = 0;
   thighRead(temp, buffer);
   printf("Temp Sensor THIGH Read %x %x \n", buffer[0], buffer[1]);
+  val = temperatureConv(CELCIUS, buffer);
+  printf("Temp Sensor THIGH Read Celcius %f \n", val);
 
-  buffer[0] = TEMP_CONFIG_REG;
-  buffer[1] = SHUTDOWN_DI;
-  configRegWrite(temp, buffer);
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register Default Val %x %x \n", buffer[0], buffer[1]);
 
-  printf("Temp sensor shutdown disabled\n");
-  buffer[0] = TEMP_CONFIG_REG;
-  buffer[1] = SHUTDOWN_EN;
+  buffer[0] |= SHUTDOWN_EN;
   configRegWrite(temp, buffer);
 
   buffer[0] = buffer[1] = 0;
   configRegRead(temp, buffer);
+  printf("Config Register Val after shutdown Enable %x %x \n", buffer[0],
+         buffer[1]);
 
-  printf("Temp Sensor after Shutdown Enabled %x %x \n", buffer[0], buffer[1]);
-
-  buffer[0] = TEMP_CONFIG_REG;
-  buffer[1] = SHUTDOWN_DI;
-  configRegWrite(temp, buffer);
-
-  buffer[0] = TEMP_CONFIG_REG;
-  buffer[1] = RES_10BIT;
-  buffer[2] = EMMODE | CONVRATE3;
-
+  buffer[0] &= SHUTDOWN_DI;
   configRegWrite(temp, buffer);
 
   buffer[0] = buffer[1] = 0;
   configRegRead(temp, buffer);
+  printf("Config Register after shutdown disable %x %x \n", buffer[0],
+         buffer[1]);
 
-  printf("Temp Sensor set to 10bit resolution EMMODE &conv rate 8Hz- %x %x \n",
+  buffer[1] |= EMMODE_EN;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after setting EM mode %x %x \n", buffer[0],
+         buffer[1]);
+
+  buffer[1] &= EMMODE_DI;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after disabling EM mode %x %x \n", buffer[0],
+         buffer[1]);
+
+  buffer[1] |= CONVRATE3;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register after setting conversion rate to 8 HZ %x %x \n",
          buffer[0], buffer[1]);
 
-  printf("Fault Bit Value %d %d\n", (buffer[0] & 0x08) >> 3,
-         (buffer[0] & 0x10) >> 4);
+  buffer[0] |= TM_EN;
+  configRegWrite(temp, buffer);
+
+  buffer[0] = buffer[1] = 0;
+  configRegRead(temp, buffer);
+  printf("Config Register val after setting interrupt mode %x %x \n", buffer[0],
+         buffer[1]);
 
 #endif
 
@@ -256,7 +292,9 @@ void *tempTask(void *pthread_inf) {
 
   /****************Do this periodically*******************************/
   while (gclose_temp & gclose_app) {
-
+#ifdef BBB
+    INTR_LED_OFF;
+#endif
     // wait for next second
     pthread_mutex_lock(&gtemp_mutex);
     while (gtemp_flag == 0) {

@@ -27,7 +27,7 @@ char* filename;
 
 #define BBB
 //#define TEST
-//#define REG_MANIPULATE
+#define REG_MANIPULATE
 
 #ifdef Test
 #undef BBB
@@ -39,6 +39,14 @@ char* filename;
 #define LED_OFF (system("echo 0 > /sys/class/leds/beaglebone:green:usr0/brightness"))
 #define LED_CONTROL(status) {if(status == 1) LED_ON; \
                              if(status == 0) LED_OFF; }
+
+#define READY_LED 		(system("echo none >/sys/class/leds/beaglebone:green:usr1/trigger"))
+#define INTR_LED_ON 		(system("echo 1 > /sys/class/leds/beaglebone:green:usr1/brightness"))
+
+#define INTR_LED_OFF		(system("echo 0 > /sys/class/leds/beaglebone:green:usr1/brightness"))
+
+
+
 #endif
 
 pthread_mutex_t light_i2c_mutex;
