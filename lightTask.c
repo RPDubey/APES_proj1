@@ -1,6 +1,6 @@
 /*******************************************************************************
    @Filename:lightTask.c
-   @Brief:
+   @Brief: implements light task functions
    @Author:Ravi Dubey
    @Date:3/14/2018
  ******************************************************************************/
@@ -144,6 +144,53 @@ void *lightTask(void *pthread_inf) {
   char data_lumen_str[BUF_SIZE - 200];
   uint16_t ch0, ch1;
   status day_night = DAY;
+  uint16_t threshlow = 0;
+
+  commandReg(light, THRESHLOWLOW, WRITE);
+  lightbuffer[0] = 0x00;
+  interruptThreshReg(light, WRITE, lightbuffer);
+
+  commandReg(light, THRESHLOWHIGH, WRITE);
+  lightbuffer[0] = 0x02;
+  interruptThreshReg(light, WRITE, lightbuffer);
+
+  commandReg(light, THRESHLOWLOW, WRITE);
+  interruptThreshReg(light, READ, lightbuffer);
+
+  threshlow = lightbuffer[0] << 8;
+  commandReg(light, THRESHLOWHIGH, WRITE);
+  interruptThreshReg(light, READ, lightbuffer);
+  threshlow |= lightbuffer[0];
+
+  printf("THRESHOLD LOW value :%x\n", threshlow);
+
+  commandReg(light, THRESHHIGHLOW, WRITE);
+  lightbuffer[0] = 0x00;
+  interruptThreshReg(light, WRITE, lightbuffer);
+
+  commandReg(light, THRESHHIGHIGH, WRITE);
+  lightbuffer[0] = 0x0A;
+  interruptThreshReg(light, WRITE, lightbuffer);
+
+  uint16_t threshhigh = 0;
+  commandReg(light, THRESHHIGHLOW, WRITE);
+  interruptThreshReg(light, READ, lightbuffer);
+
+  threshhigh = lightbuffer[0] << 8;
+  commandReg(light, THRESHHIGHIGH, WRITE);
+  interruptThreshReg(light, READ, lightbuffer);
+  threshhigh |= lightbuffer[0];
+
+  printf("THRESHOLD HIGH value :%x\n", threshhigh);
+
+  commandReg(light, INTERRUPT, WRITE);
+  interrupReg(light, READ, ENABLE, lightbuffer);
+  printf("INTERRUPT CONTROL register value default:%x\n", lightbuffer[0]);
+
+  commandReg(light, INTERRUPT, WRITE);
+  interrupReg(light, WRITE, ENABLE, lightbuffer);
+  interrupReg(light, READ, ENABLE, lightbuffer);
+  printf("INTERRUPT CONTROL register value interrupt set:%x\n", lightbuffer[0]);
 
 #endif
 
@@ -173,6 +220,7 @@ void *lightTask(void *pthread_inf) {
     sprintf(&(init_message[6][0]), "LightTask pthread_sigmask %s\n",
             strerror(errno));
   }
+
   // send initialization status
 
   notify(&init_message[0][0], notify_msgq, logger_msgq, init);

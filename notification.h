@@ -1,6 +1,6 @@
 /*******************************************************************************
    @Filename:notification.h
-   @Brief:
+   @Brief: declaration for notification functions
    @Author:Ravi Dubey
    @Date:3/14/2018
  ******************************************************************************/

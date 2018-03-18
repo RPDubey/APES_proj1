@@ -1,3 +1,11 @@
+#*******************************************************************************
+   #@Filename:Makefile
+   #@Brief:Makefile for cmocka
+   #@Author:Ravi Dubey
+   #@Date:3/14/2018
+ #******************************************************************************/
+
+
 tests: tests.c tmp102Sensor.o adps9301Sensor.o i2cWrapper.o client_test.o
 	gcc -o $@ $^ -lcmocka -lm -lrt -pthread
 

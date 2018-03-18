@@ -1,6 +1,6 @@
 /*******************************************************************************
    @Filename:signals.h
-   @Brief:
+   @Brief:declaration for signal handler functions and associated variables
    @Author:Ravi Dubey
    @Date:3/14/2018
  ******************************************************************************/

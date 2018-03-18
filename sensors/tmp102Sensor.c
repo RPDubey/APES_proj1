@@ -1,6 +1,6 @@
 /*******************************************************************************
    @Filename:tmp102Sensor.c
-   @Brief:
+   @Brief: i2c wrappers for temperature sensor functions
    @Author:Ravi Dubey
    @Date:3/14/2018
  ******************************************************************************/

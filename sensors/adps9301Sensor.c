@@ -109,25 +109,54 @@ void timingReg(int file_handler, apds9301_opt op1, apds9301_opt op2,
     printf("ERROR: invalid operation\n");
 }
 
-void interrupReg(int file_handler, apds9301_opt op) {
+void interrupReg(int file_handler, apds9301_opt op1, apds9301_opt op2,
+                 char *buffer) {
   char data;
-  if (op == ENABLE) {
-    data = 0x10;
-    // pthread_mutex_lock(&light_i2c_mutex);
 
-    i2cWrite(file_handler, &data, 1);
-    //																pthread_mutex_unlock(&light_i2c_mutex);
+  if (op1 == WRITE) {
+    if (op2 == ENABLE) {
+      data = 0x11;
+      // pthread_mutex_lock(&light_lock);
 
-  } else if (op == DISABLE) {
-    data = 0x00;
-    // pthread_mutex_lock(&light_i2c_mutex);
+      i2cWrite(file_handler, &data, 1);
+      //                                                                pthread_mutex_unlock(&light_lock);
 
-    i2cWrite(file_handler, &data, 1);
-    // pthread_mutex_unlock(&light_i2c_mutex);
+    } else if (op2 == DISABLE) {
+      data = 0x00;
+      // pthread_mutex_lock(&light_lock);
+
+      i2cWrite(file_handler, &data, 1);
+      // pthread_mutex_unlock(&light_lock);
+    }
+  }
+
+  else if (op1 == READ) {
+    i2cRead(file_handler, buffer, 1);
 
   } else
     printf("ERROR: invalid operation\n");
 }
+
+// void interrupReg(int file_handler, apds9301_opt op) {
+//   char data;
+//   if (op == ENABLE) {
+//     data = 0x10;
+//     // pthread_mutex_lock(&light_i2c_mutex);
+//
+//     i2cWrite(file_handler, &data, 1);
+//     //
+//     pthread_mutex_unlock(&light_i2c_mutex);
+//
+//   } else if (op == DISABLE) {
+//     data = 0x00;
+//     // pthread_mutex_lock(&light_i2c_mutex);
+//
+//     i2cWrite(file_handler, &data, 1);
+//     // pthread_mutex_unlock(&light_i2c_mutex);
+//
+//   } else
+//     printf("ERROR: invalid operation\n");
+// }
 
 void idRegRead(int file_handler) {
   char part_num, rev_num, id;

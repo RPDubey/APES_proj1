@@ -12,7 +12,7 @@
 #define POWERDOWN 	(0x00)
 #define LUMENS_NIGHT (10)
 
-//sensor registers
+//s Temperature ensor registers
 typedef enum{
 	CONTROL,
 	TIMING,
@@ -32,6 +32,7 @@ typedef enum{
 	DATA1HIGH
 }adps9301_regs;
 
+//light sensor registers
 typedef enum{
 	READ,
 	WRITE,
@@ -98,8 +99,8 @@ void timingReg(int file_handler, apds9301_opt op1, apds9301_opt op2,
 *@param:
 *@return:
 */
-void interrupReg(int file_handler, apds9301_opt op);
-
+void interrupReg(int file_handler, apds9301_opt op1, apds9301_opt op2,
+                 char *buffer);
 /**
 *@brief:
 *

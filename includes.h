@@ -1,6 +1,6 @@
 /*******************************************************************************
    @Filename:includes.h
-   @Brief:
+   @Brief:contains common definitions
    @Author:Ravi Dubey
    @Date:3/14/2018
  ******************************************************************************/
@@ -52,13 +52,18 @@ char* filename;
 pthread_mutex_t light_i2c_mutex;
 pthread_mutex_t temp_i2c_mutex;
 pthread_mutex_t i2c_mutex;
-
+/*
+*Temperature units structure
+*/
 typedef enum{
 	CELCIUS,
 	FARENHEIT,
 	KELVIN
 } temp_unit;
 
+/*
+*light format structure
+*/
 typedef enum{
 	LUMEN,
 	DAY_NIGHT
@@ -66,18 +71,27 @@ typedef enum{
 
 temp_unit temp_format;
 
-
+/*
+*notification message type
+*/
 typedef enum{
 init,
 error,
 notification
 }msg_type;
 
+
+/*
+*notification pack structure
+*/
 typedef struct{
 char msg[BUF_SIZE-sizeof(msg_type)];
 msg_type type;
 }notify_pack;
 
+/*
+*Task type structure
+*/
 typedef enum {
   temperatue_Task,
   light_Task,
